@@ -72,12 +72,6 @@ async function fetchRepoFiles(repoUrl) {
 
   console.log(`✅ Matching files to fetch: ${matchingFiles.length}`);
 
-  // Optional: log a few matching paths and their extensions
-  matchingFiles.slice(0, 50).forEach((file, index) => {
-    const ext = file.path.split('.').pop();
-    console.log(`${index + 1}. ${file.path} [.${ext}]`);
-  });
-
   const files = {};
   for (const file of matchingFiles) {
     const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${file.path}`;

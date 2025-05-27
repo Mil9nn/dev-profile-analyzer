@@ -85,14 +85,9 @@ export function ProfileForm() {
         setError("");
         setResult(null);
         try {
-            console.log("Sending request with values:", values);
             const res = await axiosInstance.post<AnalyzeResponse>('/analyze', values);
-            console.log("Full response:", res);
-            console.log("Response data:", res.data);
             setResult(res.data);
         } catch (err: any) {
-            console.error("Request failed:", err);
-            console.error("Error response:", err.response);
             setError(err.response?.data?.message || err.message || "Something went wrong.");
         } finally {
             setLoading(false);
@@ -295,14 +290,6 @@ export function ProfileForm() {
                                 <p className="text-sm text-gray-700 leading-relaxed">{result.aiFeedback.conclusion}</p>
                             </div>
                         )}
-
-                        {/* Debug Section - Remove this in production */}
-                        <div className="bg-yellow-50 p-4 rounded-lg shadow-sm border border-yellow-200">
-                            <h3 className="text-lg font-semibold text-yellow-800 mb-3">Debug Info (Remove in production)</h3>
-                            <pre className="text-xs text-gray-600 overflow-auto">
-                                {JSON.stringify(result.aiFeedback, null, 2)}
-                            </pre>
-                        </div>
                     </div>
                 )}
             </section>
