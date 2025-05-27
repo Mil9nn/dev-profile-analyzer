@@ -15,8 +15,7 @@ async function fetchRepoFiles(repoUrl) {
   }
 
   const data = await treeRes.json();
-  console.log(`📦 Total files in tree: ${data.tree.length}`);
-
+  
   const excludedDirs = [
     "node_modules",
     "dist",
@@ -32,6 +31,8 @@ async function fetchRepoFiles(repoUrl) {
     "coverage",
     "android",
     "ios",
+    "skeletons",
+    "seeds",
     "public", // often static assets
     "assets", // can be images/audio
     "__tests__", // optional if you don't want test analysis
@@ -52,6 +53,9 @@ async function fetchRepoFiles(repoUrl) {
     ".prettierrc",
     "tsconfig.json",
     "jsconfig.json",
+    "eslint.config.js",
+    "tailwind.config.js",
+    "vite.config.js",
     "babel.config.js",
   ];
 
@@ -69,7 +73,7 @@ async function fetchRepoFiles(repoUrl) {
   console.log(`✅ Matching files to fetch: ${matchingFiles.length}`);
 
   // Optional: log a few matching paths and their extensions
-  matchingFiles.slice(0, 20).forEach((file, index) => {
+  matchingFiles.slice(0, 50).forEach((file, index) => {
     const ext = file.path.split('.').pop();
     console.log(`${index + 1}. ${file.path} [.${ext}]`);
   });
