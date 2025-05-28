@@ -1,21 +1,21 @@
-import { Menu } from "lucide-react"
+import { Menu, Target } from "lucide-react"
 
 export default function Navbar() {
   return (
-    <header className="sticky inset-0 z-50 border-b border-slate-100 bg-black/80 backdrop-blur-lg">
+    <header className="sticky inset-0 z-50 bg-zinc-950 backdrop-blur-lg">
       <nav className="mx-auto flex max-w-6xl items-center gap-8 px-6 py-4 transition-all duration-200 ease-in-out lg:px-12">
-        
+
         {/* Logo */}
         <div className="relative flex items-center">
           <a href="/">
-            <img
-              src="https://www.svgrepo.com/show/499831/target.svg"
-              loading="lazy"
-              width="32"
-              height="32"
-              alt="Logo"
-              style={{ color: "transparent" }}
-            />
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#965bff] rounded-full text-sm text-slate-300 backdrop-blur-sm border border-white/20">
+              <Target className="size-5" />
+              <code className="flex items-center text-white font-mono text-base">
+                <span className="text-black font-bold text-lg">&lt;</span>
+                <span className="text-white">DevProfile Analyzer</span>
+                <span className="text-black font-bold text-lg"> /&gt;</span>
+              </code>
+            </div>
           </a>
         </div>
 
@@ -42,7 +42,7 @@ export default function Navbar() {
           </a>
           <a
             href="#"
-            className="rounded-md bg-gradient-to-br from-green-600 to-emerald-400 px-3 py-1.5 font-dm text-sm font-medium text-white shadow-md shadow-green-400/50 transition-transform duration-200 ease-in-out hover:scale-[1.03]"
+            className="rounded-md px-3 py-1.5 font-dm text-sm font-medium text-white shadow-md shadow-purple-400/80 transition-transform duration-200 ease-in-out hover:scale-[1.05]"
           >
             Sign up for free
           </a>

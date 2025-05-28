@@ -1,13 +1,13 @@
-import { ProfileForm } from './components/InputForm'
-import Navbar from './components/Navbar'
+import { Routes, Route } from 'react-router-dom'
+import HomePage from './pages/HomePage'
+import AnalysisPage from './pages/AnalysisPage'
 
 function App() {
-
   return (
-    <>
-    <Navbar/>
-    <ProfileForm />
-    </>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/analyze" element={<AnalysisPage />} />
+      </Routes>
   )
 }
 
