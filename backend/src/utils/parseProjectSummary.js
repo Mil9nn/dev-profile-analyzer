@@ -30,41 +30,54 @@ export function parseProjectSummary(summaryText) {
     }
   }
 
-  // Extract rationale - look for bullets after score section
-  const scoreSection = summaryText.match(/(?:score|rating)[\s\S]*?(?=(?:\d+\.|technologies|detected|strengths|weaknesses|hiring|conclusion)|$)/i);
-  if (scoreSection) {
-    const rationale = extractBulletPoints(scoreSection[0]);
-    if (rationale.length > 0) {
-      result.rationale = rationale;
-    }
+  // Extract detailed breakdown for rationale - look for the scoring breakdown
+  const breakdownSection = summaryText.match(/(?:detailed\s*breakdown|breakdown):?\s*([\s\S]*?)(?=(?:technologies|detected|strengths|weaknesses|hiring|conclusion)|$)/i);
+  if (breakdownSection) {
+    result.rationale = extractRationale(breakdownSection[1]);
+  } else {
+    // Fallback: extract rationale from lines containing scores
+    const rationaleLines = summaryText.split('\n')
+      .filter(line => line.includes('/10') && (line.includes('Architecture') || line.includes('Complexity') || line.includes('Technology') || line.includes('Code Quality') || line.includes('Innovation')))
+      .map(line => line.trim());
+    result.rationale = rationaleLines;
   }
 
-  // Extract technologies - more flexible patterns
-  const techSection = summaryText.match(/(?:technologies|tech\s*stack|frameworks|libraries)[\s\S]*?(?=(?:\d+\.|strengths|weaknesses|hiring|conclusion)|$)/i);
+  // Extract technologies - simplified and more flexible approach
+  const techSection = summaryText.match(/(?:technologies|tech\s*stack|frameworks|libraries)\s*(?:detected|used)?:?\s*([\s\S]*?)(?=(?:\n\s*#+|\n\s*\*\*[A-Z][^*]*:|\n\s*##|strengths|weaknesses|improvements|hiring|conclusion)|$)/i);
   if (techSection) {
-    result.technologies = extractTechnologies(techSection[0]);
+    result.technologies = extractTechnologies(techSection[1]);
+  }
+  
+  // Fallback: look for technologies in bullet points anywhere in the response
+  if (result.technologies.length === 0) {
+    const allBullets = extractBulletPoints(summaryText);
+    const techBullets = allBullets.filter(bullet => {
+      const commonTechKeywords = ['react', 'node', 'express', 'javascript', 'typescript', 'html', 'css', 'tailwind', 'mongodb', 'api', 'json', 'framework', 'library'];
+      return commonTechKeywords.some(keyword => bullet.toLowerCase().includes(keyword)) && !bullet.includes('/10');
+    });
+    result.technologies = techBullets.slice(0, 10); // Limit to reasonable number
   }
 
   // Extract strengths
-  const strengthsSection = summaryText.match(/strengths?:?\s*([\s\S]*?)(?=(?:weaknesses?|improvements?|hiring|conclusion|\d+\.)|$)/i);
+  const strengthsSection = summaryText.match(/strengths?:?\s*([\s\S]*?)(?=(?:weaknesses?|improvements?|hiring|conclusion|\n\s*##|\n\s*\*\*[^*]*\*\*)|$)/i);
   if (strengthsSection) {
     result.strengths = extractBulletPoints(strengthsSection[1]);
   }
 
   // Extract weaknesses
-  const weaknessesSection = summaryText.match(/(?:weaknesses?|areas?\s*for\s*improvement):?\s*([\s\S]*?)(?=(?:improvements?|strengths?|hiring|conclusion|\d+\.)|$)/i);
+  const weaknessesSection = summaryText.match(/(?:weaknesses?|areas?\s*for\s*improvement):?\s*([\s\S]*?)(?=(?:improvements?|strengths?|hiring|conclusion|\n\s*##|\n\s*\*\*[^*]*\*\*)|$)/i);
   if (weaknessesSection) {
     result.weaknesses = extractBulletPoints(weaknessesSection[1]);
   }
 
   // Extract improvements
-  const improvementsSection = summaryText.match(/(?:improvements?|suggestions?|recommendations?):?\s*([\s\S]*?)(?=(?:strengths?|weaknesses?|hiring|conclusion|\d+\.)|$)/i);
+  const improvementsSection = summaryText.match(/(?:improvements?|suggestions?|recommendations?):?\s*([\s\S]*?)(?=(?:strengths?|weaknesses?|hiring|conclusion|\n\s*##|\n\s*\*\*[^*]*\*\*)|$)/i);
   if (improvementsSection) {
     result.improvements = extractBulletPoints(improvementsSection[1]);
   }
 
   // Extract hiring potential
-  const hiringSection = summaryText.match(/hiring\s*potential[\s\S]*?(?=(?:\d+\.|conclusion)|$)/i);
+  const hiringSection = summaryText.match(/hiring\s*potential[\s\S]*?(?=(?:\n\s*##|conclusion)|$)/i);
   if (hiringSection) {
     const hiringText = hiringSection[0];
     
@@ -103,6 +116,39 @@ export function parseProjectSummary(summaryText) {
   }
 
   return result;
+}
+
+// Helper function to extract rationale (scoring breakdown)
+function extractRationale(text) {
+  if (!text) return [];
+  
+  const rationale = [];
+  
+  // Look for lines with scoring patterns like "Architecture: 5/10 (reason)"
+  const scoreLines = text.split('\n').filter(line => {
+    return line.includes('/10') && (
+      line.includes('Architecture') || 
+      line.includes('Complexity') || 
+      line.includes('Technology') || 
+      line.includes('Code Quality') || 
+      line.includes('Innovation') ||
+      line.includes('Technical')
+    );
+  });
+  
+  for (const line of scoreLines) {
+    const cleaned = line.trim().replace(/^[-•*]\s*/, '');
+    if (cleaned.length > 10) {
+      rationale.push(cleaned);
+    }
+  }
+  
+  // If no score lines found, fall back to bullet points
+  if (rationale.length === 0) {
+    return extractBulletPoints(text);
+  }
+  
+  return rationale;
 }
 
 // Helper function to extract bullet points from text
@@ -145,40 +191,62 @@ function extractBulletPoints(text, contextFilter = null) {
   return [...new Set(bullets)]; // Remove duplicates
 }
 
-// Helper function to extract technologies
+// Helper function to extract technologies - SIMPLIFIED VERSION
 function extractTechnologies(text) {
+  if (!text) return [];
+  
   const technologies = [];
   
+  // Clean the text - remove obvious non-tech content
+  const cleanText = text.replace(/\/10.*$/gm, '').replace(/\(.*?\)/g, '');
+  
   // Look for bullet points first
-  const bullets = extractBulletPoints(text);
+  const bullets = extractBulletPoints(cleanText);
   if (bullets.length > 0) {
-    return bullets.map(bullet => bullet.replace(/\*\*([^*]+)\*\*/g, '$1').trim());
+    // Take bullets that look like technologies (short, single words/phrases)
+    const techBullets = bullets.filter(bullet => {
+      return bullet.length < 50 && 
+             !bullet.toLowerCase().includes('quality') &&
+             !bullet.toLowerCase().includes('readable') &&
+             !bullet.toLowerCase().includes('lacks') &&
+             !bullet.toLowerCase().includes('implementation');
+    });
+    
+    if (techBullets.length > 0) {
+      return techBullets.map(bullet => bullet.replace(/\*\*([^*]+)\*\*/g, '$1').trim());
+    }
   }
 
-  // Look for comma-separated technologies
-  const techList = text.match(/(?:technologies|frameworks|libraries)[:\s]+(.*?)(?:\n|$)/i);
-  if (techList) {
-    const items = techList[1].split(/[,;]/)
-      .map(item => item.trim().replace(/\*\*([^*]+)\*\*/g, '$1'))
-      .filter(item => item.length > 0);
-    technologies.push(...items);
+  // Look for inline technologies (comma or newline separated)
+  const lines = cleanText.split('\n').filter(line => line.trim().length > 0);
+  for (const line of lines) {
+    if (line.includes(',')) {
+      const items = line.split(',').map(item => item.trim().replace(/^[-•*]\s*/, ''));
+      technologies.push(...items.filter(item => item.length > 0 && item.length < 30));
+    } else {
+      const cleaned = line.trim().replace(/^[-•*]\s*/, '');
+      if (cleaned.length > 0 && cleaned.length < 30) {
+        technologies.push(cleaned);
+      }
+    }
   }
 
-  // Look for common tech keywords if nothing else worked
+  // Fallback: Look for common tech keywords
   if (technologies.length === 0) {
     const commonTech = [
       'React', 'Vue', 'Angular', 'Node.js', 'Express', 'MongoDB', 'PostgreSQL', 'MySQL',
       'TypeScript', 'JavaScript', 'Python', 'Java', 'PHP', 'Ruby', 'Go', 'Rust',
-      'Docker', 'Kubernetes', 'AWS', 'Azure', 'GCP', 'Redis', 'GraphQL', 'REST API',
-      'Next.js', 'Nuxt.js', 'Svelte', 'TailwindCSS', 'Bootstrap', 'SASS', 'SCSS'
+      'HTML', 'CSS', 'TailwindCSS', 'Tailwind CSS', 'Bootstrap', 'SASS', 'SCSS',
+      'REST API', 'GraphQL', 'JSON', 'Git'
     ];
 
+    const textLower = text.toLowerCase();
     for (const tech of commonTech) {
-      if (text.toLowerCase().includes(tech.toLowerCase())) {
+      if (textLower.includes(tech.toLowerCase())) {
         technologies.push(tech);
       }
     }
   }
 
-  return [...new Set(technologies)]; // Remove duplicates
+  return [...new Set(technologies)].slice(0, 10); // Remove duplicates and limit
 }
