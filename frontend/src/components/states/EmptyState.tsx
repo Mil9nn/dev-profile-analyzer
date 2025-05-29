@@ -1,9 +1,6 @@
-import { useAnalysisStore } from "@/hooks/useAnalysisStore";
 import { Target } from "lucide-react";
-import { ErrorMessage } from "./ErrorMessage";
 
 export function EmptyState() {
-  const { error } = useAnalysisStore();
 
   return (
     <div className="flex flex-col items-center backdrop-blur-xl rounded-2xl p-8 text-center">
@@ -12,7 +9,6 @@ export function EmptyState() {
       </div>
       <h3 className="text-xl font-bold text-white mb-2">Ready to Analyze</h3>
       <p className="text-slate-400">Fill out the form to get comprehensive AI feedback on your developer profile and projects.</p>
-      {error && <ErrorMessage error={error} />}
     </div>
   );
 }

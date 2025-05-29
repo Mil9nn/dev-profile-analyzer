@@ -1,42 +1,42 @@
-import Navbar from '@/components/Navbar';
-import { ProfileAnalysisForm } from '@/components/ProfileAnalysisForm';
-import { EmptyState } from '@/components/states/EmptyState';
-import { useAnalysisStore } from '@/hooks/useAnalysisStore';
-import { LoadingState } from '@/components/states/LoadingState';
-import { ResultsDisplay } from '@/components/results/ResultsDisplay';
-import { ErrorMessage } from '@/components/states/ErrorMessage';
+import { Loader2 } from 'lucide-react'
+import Navbar from '../components/Navbar'
+import { AnalysisForm } from '../components/AnalysisForm'
+import { ResultsDisplay } from '../components/ResultsDisplay'
+import { useAnalysis } from '../hooks/useAnalysis'
 
-const AnalysisPage = () => {
-    const { loading, result, error, progress, currentStep } = useAnalysisStore();
-    
-    return (
-        <div className="min-h-screen bg-zinc-900 text-white">
-            <Navbar />
-            {/* Main Component */}
-            <div className="flex flex-col lg:flex-row gap-8 px-6 py-12">
-                {/* Form */}
-                <div className="lg:w-1/2 w-full">
-                    <ProfileAnalysisForm />
-                </div>
-
-                {/* Results/Loading/Empty State */}
-                <div className="w-full h-full rounded-md flex justify-center items-center">
-                    {error ? (
-                        <ErrorMessage message={error} />
-                    ) : loading ? (
-                        <LoadingState 
-                            progress={progress} 
-                            currentStep={currentStep} 
-                        />
-                    ) : result?.aiFeedback ? (
-                        <ResultsDisplay result={result} />
-                    ) : (
-                        <EmptyState />
-                    )}
-                </div>
-            </div>
+export default function AnalysisPage() {
+  const { loading, result, error } = useAnalysis()
+  
+  return (
+    <div className="min-h-screen bg-zinc-900 text-white">
+      <Navbar />
+      <div className="container mx-auto px-6 py-12">
+        <div className="grid lg:grid-cols-2 gap-8">
+          <div>
+            <h1 className="text-3xl font-bold mb-6">Profile Analysis</h1>
+            <AnalysisForm />
+          </div>
+          
+          <div className="flex items-center justify-center">
+            {error ? (
+              <div className="text-center p-8 bg-red-500/10 rounded-lg border border-red-500/20">
+                <p className="text-red-400">{error}</p>
+              </div>
+            ) : loading ? (
+              <div className="text-center p-8">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-purple-400" />
+                <p className="text-slate-400">Analyzing your profile...</p>
+              </div>
+            ) : result ? (
+              <ResultsDisplay result={result} />
+            ) : (
+              <div className="text-center p-8">
+                <p className="text-slate-400">Fill out the form to get your analysis</p>
+              </div>
+            )}
+          </div>
         </div>
-    );
-};
-
-export default AnalysisPage;
+      </div>
+    </div>
+  )
+}
