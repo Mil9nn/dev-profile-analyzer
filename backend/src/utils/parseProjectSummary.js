@@ -42,21 +42,8 @@ export function parseProjectSummary(summaryText) {
     result.rationale = rationaleLines;
   }
 
-  // Extract technologies - simplified and more flexible approach
-  const techSection = summaryText.match(/(?:technologies|tech\s*stack|frameworks|libraries)\s*(?:detected|used)?:?\s*([\s\S]*?)(?=(?:\n\s*#+|\n\s*\*\*[A-Z][^*]*:|\n\s*##|strengths|weaknesses|improvements|hiring|conclusion)|$)/i);
-  if (techSection) {
-    result.technologies = extractTechnologies(techSection[1]);
-  }
-  
-  // Fallback: look for technologies in bullet points anywhere in the response
-  if (result.technologies.length === 0) {
-    const allBullets = extractBulletPoints(summaryText);
-    const techBullets = allBullets.filter(bullet => {
-      const commonTechKeywords = ['react', 'node', 'express', 'javascript', 'typescript', 'html', 'css', 'tailwind', 'mongodb', 'api', 'json', 'framework', 'library'];
-      return commonTechKeywords.some(keyword => bullet.toLowerCase().includes(keyword)) && !bullet.includes('/10');
-    });
-    result.technologies = techBullets.slice(0, 10); // Limit to reasonable number
-  }
+  // FIXED: Extract technologies with improved logic
+  result.technologies = extractTechnologies(summaryText);
 
   // Extract strengths
   const strengthsSection = summaryText.match(/strengths?:?\s*([\s\S]*?)(?=(?:weaknesses?|improvements?|hiring|conclusion|\n\s*##|\n\s*\*\*[^*]*\*\*)|$)/i);
@@ -191,62 +178,130 @@ function extractBulletPoints(text, contextFilter = null) {
   return [...new Set(bullets)]; // Remove duplicates
 }
 
-// Helper function to extract technologies - SIMPLIFIED VERSION
-function extractTechnologies(text) {
-  if (!text) return [];
-  
+// COMPLETELY REWRITTEN: Simplified and more reliable technology extraction
+function extractTechnologies(summaryText) {
   const technologies = [];
   
-  // Clean the text - remove obvious non-tech content
-  const cleanText = text.replace(/\/10.*$/gm, '').replace(/\(.*?\)/g, '');
+  // First, try to find the dedicated technologies section
+  const techSectionPatterns = [
+    /##\s*technologies?\s*detected[:\s]*([\s\S]*?)(?=##|\n\s*\*\*|\n\s*###|$)/i,
+    /technologies?\s*detected[:\s]*([\s\S]*?)(?=##|\*\*[A-Z][^*]*:|###|strengths|weaknesses|$)/i,
+    /##\s*technologies?\s*used[:\s]*([\s\S]*?)(?=##|\n\s*\*\*|\n\s*###|$)/i,
+    /tech\s*stack[:\s]*([\s\S]*?)(?=##|\*\*[A-Z][^*]*:|###|strengths|weaknesses|$)/i
+  ];
+
+  let techSection = null;
+  for (const pattern of techSectionPatterns) {
+    const match = summaryText.match(pattern);
+    if (match && match[1]) {
+      techSection = match[1].trim();
+      break;
+    }
+  }
+
+  if (techSection) {
+    console.log('Found tech section:', techSection.substring(0, 200) + '...');
+    
+    // Extract bullet points from the technologies section
+    const bullets = extractTechnologiesFromSection(techSection);
+    if (bullets.length > 0) {
+      technologies.push(...bullets);
+    }
+  }
+
+  // If no dedicated section found, look for inline mentions
+  if (technologies.length === 0) {
+    console.log('No tech section found, looking for inline mentions...');
+    technologies.push(...findInlineTechnologies(summaryText));
+  }
+
+  // Clean up and deduplicate
+  const cleanedTechnologies = technologies
+    .map(tech => tech.replace(/[*_`]/g, '').trim()) // Remove markdown formatting
+    .filter(tech => tech.length > 1 && tech.length < 50) // Reasonable length
+    .filter(tech => !tech.includes('/10')) // Remove scoring lines
+    .filter(tech => !tech.toLowerCase().includes('quality'))
+    .filter(tech => !tech.toLowerCase().includes('implementation'))
+    .filter(tech => !tech.toLowerCase().includes('structure'));
+
+  return [...new Set(cleanedTechnologies)].slice(0, 10);
+}
+
+function extractTechnologiesFromSection(sectionText) {
+  const technologies = [];
   
   // Look for bullet points first
-  const bullets = extractBulletPoints(cleanText);
-  if (bullets.length > 0) {
-    // Take bullets that look like technologies (short, single words/phrases)
-    const techBullets = bullets.filter(bullet => {
-      return bullet.length < 50 && 
-             !bullet.toLowerCase().includes('quality') &&
-             !bullet.toLowerCase().includes('readable') &&
-             !bullet.toLowerCase().includes('lacks') &&
-             !bullet.toLowerCase().includes('implementation');
-    });
-    
-    if (techBullets.length > 0) {
-      return techBullets.map(bullet => bullet.replace(/\*\*([^*]+)\*\*/g, '$1').trim());
-    }
-  }
+  const bulletPatterns = [
+    /^[-•*]\s*([^\n]+)/gm,
+    /^\s*\d+\.\s*([^\n]+)/gm
+  ];
 
-  // Look for inline technologies (comma or newline separated)
-  const lines = cleanText.split('\n').filter(line => line.trim().length > 0);
-  for (const line of lines) {
-    if (line.includes(',')) {
-      const items = line.split(',').map(item => item.trim().replace(/^[-•*]\s*/, ''));
-      technologies.push(...items.filter(item => item.length > 0 && item.length < 30));
-    } else {
-      const cleaned = line.trim().replace(/^[-•*]\s*/, '');
-      if (cleaned.length > 0 && cleaned.length < 30) {
-        technologies.push(cleaned);
-      }
-    }
-  }
-
-  // Fallback: Look for common tech keywords
-  if (technologies.length === 0) {
-    const commonTech = [
-      'React', 'Vue', 'Angular', 'Node.js', 'Express', 'MongoDB', 'PostgreSQL', 'MySQL',
-      'TypeScript', 'JavaScript', 'Python', 'Java', 'PHP', 'Ruby', 'Go', 'Rust',
-      'HTML', 'CSS', 'TailwindCSS', 'Tailwind CSS', 'Bootstrap', 'SASS', 'SCSS',
-      'REST API', 'GraphQL', 'JSON', 'Git'
-    ];
-
-    const textLower = text.toLowerCase();
-    for (const tech of commonTech) {
-      if (textLower.includes(tech.toLowerCase())) {
+  for (const pattern of bulletPatterns) {
+    const matches = [...sectionText.matchAll(pattern)];
+    for (const match of matches) {
+      const tech = match[1].trim();
+      if (tech && tech.length > 1 && tech.length < 50) {
         technologies.push(tech);
       }
     }
   }
 
-  return [...new Set(technologies)].slice(0, 10); // Remove duplicates and limit
+  // If no bullets, try line by line
+  if (technologies.length === 0) {
+    const lines = sectionText.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && line.length < 50)
+      .filter(line => !line.includes(':') || line.split(':').length === 2);
+    
+    technologies.push(...lines);
+  }
+
+  return technologies;
+}
+
+function findInlineTechnologies(summaryText) {
+  const commonTechnologies = [
+    // Frontend
+    'React', 'Vue.js', 'Vue', 'Angular', 'Svelte', 'Next.js', 'Nuxt.js',
+    'JavaScript', 'TypeScript', 'HTML', 'CSS', 'SCSS', 'Sass',
+    'TailwindCSS', 'Tailwind CSS', 'Bootstrap', 'Material-UI', 'Chakra UI',
+    
+    // Backend
+    'Node.js', 'Express.js', 'Express', 'Fastify', 'Koa.js',
+    'Python', 'Django', 'Flask', 'FastAPI',
+    'Java', 'Spring Boot', 'Spring',
+    'PHP', 'Laravel', 'Symfony',
+    'Ruby', 'Ruby on Rails', 'Rails',
+    'Go', 'Gin', 'Echo',
+    'Rust', 'Actix', 'Rocket',
+    'C#', '.NET', 'ASP.NET',
+    
+    // Databases
+    'MongoDB', 'PostgreSQL', 'MySQL', 'SQLite', 'Redis',
+    'Firebase', 'Supabase', 'Prisma', 'Mongoose',
+    
+    // Tools & Others
+    'Docker', 'Kubernetes', 'AWS', 'GCP', 'Azure',
+    'GraphQL', 'REST API', 'API', 'JSON',
+    'Git', 'GitHub', 'GitLab',
+    'Webpack', 'Vite', 'Parcel', 'Rollup',
+    'Jest', 'Cypress', 'Testing Library',
+    'ESLint', 'Prettier'
+  ];
+
+  const foundTechnologies = [];
+  const textLower = summaryText.toLowerCase();
+
+  for (const tech of commonTechnologies) {
+    const techLower = tech.toLowerCase();
+    if (textLower.includes(techLower)) {
+      // Make sure it's a whole word match or followed by common suffixes
+      const regex = new RegExp(`\\b${techLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\b|\\.|js|css)`, 'i');
+      if (regex.test(summaryText)) {
+        foundTechnologies.push(tech);
+      }
+    }
+  }
+
+  return foundTechnologies;
 }
