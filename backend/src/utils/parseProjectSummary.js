@@ -200,8 +200,6 @@ function extractTechnologies(summaryText) {
   }
 
   if (techSection) {
-    console.log('Found tech section:', techSection.substring(0, 200) + '...');
-    
     // Extract bullet points from the technologies section
     const bullets = extractTechnologiesFromSection(techSection);
     if (bullets.length > 0) {
