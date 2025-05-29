@@ -107,20 +107,32 @@ class ASTAnalyzer {
                     }
                 },
 
-                // Detect API Routes
+                // FIXED: Combined CallExpression visitor to handle both API routes and other patterns
                 CallExpression: (path) => {
+                    // Detect Express API Routes
                     if (this.isExpressRoute(path.node)) {
+                        const method = path.node.callee.property?.name || 'unknown';
+                        const route = this.extractRoutePattern(path.node);
+                        
                         this.metrics.architecture.apiEndpoints.push({
-                            method: path.node.callee.property?.name || 'unknown',
+                            method: method.toUpperCase(),
+                            route: route,
                             file: filepath
                         });
                         this.metrics.technologies.frameworks.add('Express.js');
+                        
+                        console.log(`✅ Detected API endpoint: ${method.toUpperCase()} ${route} in ${filepath}`);
                     }
 
-                    // Detect async patterns
+                    // Detect async patterns and API calls
                     if (path.node.callee.name === 'fetch' ||
                         (path.node.callee.object && path.node.callee.object.name === 'axios')) {
                         this.metrics.technologies.patterns.add('API Calls');
+                    }
+
+                    // Detect React Hooks
+                    if (path.node.callee.name && path.node.callee.name.startsWith('use')) {
+                        this.metrics.technologies.patterns.add('React Hooks');
                     }
                 },
 
@@ -147,13 +159,6 @@ class ASTAnalyzer {
                     this.metrics.complexity.cyclomaticComplexity++;
                 },
 
-                // Detect Hooks
-                CallExpression: (path) => {
-                    if (path.node.callee.name && path.node.callee.name.startsWith('use')) {
-                        this.metrics.technologies.patterns.add('React Hooks');
-                    }
-                },
-
                 // Calculate nesting depth
                 enter: (path) => {
                     const depth = this.getPathDepth(path);
@@ -170,6 +175,41 @@ class ASTAnalyzer {
         } catch (error) {
             console.warn(`Failed to parse ${filepath}:`, error.message);
         }
+    }
+
+    // ENHANCED: Better Express route detection
+    isExpressRoute(node) {
+        if (!node.callee || node.callee.type !== 'MemberExpression') {
+            return false;
+        }
+
+        const methodName = node.callee.property?.name;
+        const httpMethods = ['get', 'post', 'put', 'delete', 'patch', 'use', 'all'];
+        
+        // Check if it's an HTTP method
+        if (!httpMethods.includes(methodName)) {
+            return false;
+        }
+
+        // Additional checks to ensure it's likely an Express route
+        const objectName = node.callee.object?.name;
+        const hasStringArg = node.arguments.length > 0 && 
+                           (node.arguments[0].type === 'StringLiteral' || 
+                            node.arguments[0].type === 'Literal');
+
+        // Common Express patterns: app.get(), router.post(), etc.
+        return (objectName === 'app' || objectName === 'router' || objectName === 'express') && hasStringArg;
+    }
+
+    // NEW: Extract route pattern from Express route definition
+    extractRoutePattern(node) {
+        if (node.arguments.length > 0) {
+            const firstArg = node.arguments[0];
+            if (firstArg.type === 'StringLiteral' || firstArg.type === 'Literal') {
+                return firstArg.value || firstArg.raw || '/';
+            }
+        }
+        return '/';
     }
 
     analyzeConfigFile(filepath, content) {
@@ -205,12 +245,6 @@ class ASTAnalyzer {
             content.includes('jsx') ||
             content.includes('React.createElement')
         );
-    }
-
-    isExpressRoute(node) {
-        return node.callee &&
-            node.callee.type === 'MemberExpression' &&
-            ['get', 'post', 'put', 'delete', 'patch', 'use'].includes(node.callee.property?.name);
     }
 
     categorizeImport(source) {
@@ -293,18 +327,18 @@ class ASTAnalyzer {
     }
 
     getPathDepth(path) {
-  let depth = 0;
-  let current = path;
-  while (current && current.parent) {
-    if (current.node && (current.node.type === 'BlockStatement' || 
-        current.node.type === 'FunctionDeclaration' || 
-        current.node.type === 'ArrowFunctionExpression')) {
-      depth++;
+        let depth = 0;
+        let current = path;
+        while (current && current.parent) {
+            if (current.node && (current.node.type === 'BlockStatement' || 
+                current.node.type === 'FunctionDeclaration' || 
+                current.node.type === 'ArrowFunctionExpression')) {
+                depth++;
+            }
+            current = current.parent;
+        }
+        return depth;
     }
-    current = current.parent;
-  }
-  return depth;
-}
 
     generateStructuredSummary() {
         const totalFiles = this.metrics.architecture.totalFiles;
@@ -312,7 +346,7 @@ class ASTAnalyzer {
         const complexityScore = this.calculateComplexityScore();
         const technologyScore = this.calculateTechnologyScore();
         const qualityScore = this.calculateQualityScore();
-
+        
         return {
             overview: {
                 totalFiles,
@@ -354,6 +388,7 @@ class ASTAnalyzer {
         };
     }
 
+    // ENHANCED: Better architecture scoring that properly accounts for APIs
     calculateArchitectureScore() {
         let score = 1;
 
@@ -361,18 +396,25 @@ class ASTAnalyzer {
         if (this.metrics.architecture.components.length > 5) score += 2;
         else if (this.metrics.architecture.components.length > 2) score += 1;
 
-        // API structure
-        if (this.metrics.architecture.apiEndpoints.length > 5) score += 2;
-        else if (this.metrics.architecture.apiEndpoints.length > 2) score += 1;
+        // API structure - FIXED scoring
+        const apiCount = this.metrics.architecture.apiEndpoints.length;
+        if (apiCount > 5) {
+            score += 3; // Strong API layer
+        } else if (apiCount > 2) {
+            score += 2; // Good API layer
+        } else if (apiCount > 0) {
+            score += 1; // Basic API layer
+        }
 
         // File organization
         if (this.metrics.architecture.totalFiles > 10) score += 1;
+        else if (this.metrics.architecture.totalFiles > 5) score += 0.5;
 
         // Patterns
-        if (this.metrics.technologies.patterns.size > 3) score += 2;
-        else if (this.metrics.technologies.patterns.size > 1) score += 1;
+        if (this.metrics.technologies.patterns.size > 3) score += 1;
+        else if (this.metrics.technologies.patterns.size > 1) score += 0.5;
 
-        return Math.min(score, 9);
+        return Math.min(Math.round(score), 9);
     }
 
     calculateComplexityScore() {
@@ -427,10 +469,17 @@ class ASTAnalyzer {
         return 'Very Low';
     }
 
+    // ENHANCED: Better separation assessment
     calculateSeparationLevel() {
-        if (this.metrics.architecture.components.length > 5 && this.metrics.architecture.apiEndpoints.length > 3) {
+        const componentCount = this.metrics.architecture.components.length;
+        const apiCount = this.metrics.architecture.apiEndpoints.length;
+        const hasFramework = this.metrics.technologies.frameworks.size > 0;
+        
+        if (componentCount > 5 && apiCount > 3 && hasFramework) {
+            return 'Excellent';
+        } else if (componentCount > 3 && apiCount > 1) {
             return 'Good';
-        } else if (this.metrics.architecture.components.length > 2 || this.metrics.architecture.apiEndpoints.length > 1) {
+        } else if (componentCount > 1 || apiCount > 0) {
             return 'Basic';
         }
         return 'Poor';
@@ -453,6 +502,12 @@ class ASTAnalyzer {
 
         if (this.metrics.technologies.patterns.has('API Calls')) {
             patterns.push('Service Layer');
+        }
+
+        // Add MVC pattern detection for Express apps
+        if (this.metrics.technologies.frameworks.has('Express.js') && 
+            this.metrics.architecture.apiEndpoints.length > 1) {
+            patterns.push('MVC Architecture');
         }
 
         return patterns;
