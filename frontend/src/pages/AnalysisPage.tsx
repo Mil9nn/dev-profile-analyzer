@@ -7,7 +7,8 @@ import { ResultsDisplay } from '@/components/results/ResultsDisplay';
 import { ErrorMessage } from '@/components/states/ErrorMessage';
 
 const AnalysisPage = () => {
-    const { loading, result } = useAnalysisStore();
+    const { loading, result, error, progress, currentStep } = useAnalysisStore();
+    
     return (
         <div className="min-h-screen bg-zinc-900 text-white">
             <Navbar />
@@ -18,9 +19,20 @@ const AnalysisPage = () => {
                     <ProfileAnalysisForm />
                 </div>
 
-                {/* EmptyState */}
+                {/* Results/Loading/Empty State */}
                 <div className="w-full h-full rounded-md flex justify-center items-center">
-                    {loading ? <LoadingState /> : result?.aiFeedback ? <ResultsDisplay result={result} /> : <EmptyState />}
+                    {error ? (
+                        <ErrorMessage message={error} />
+                    ) : loading ? (
+                        <LoadingState 
+                            progress={progress} 
+                            currentStep={currentStep} 
+                        />
+                    ) : result?.aiFeedback ? (
+                        <ResultsDisplay result={result} />
+                    ) : (
+                        <EmptyState />
+                    )}
                 </div>
             </div>
         </div>
