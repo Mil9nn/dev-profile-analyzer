@@ -7,32 +7,23 @@ class ConfigAnalyzer {
     }
 
     analyzeFile(filepath, content, metrics) {
-        this.checkTestFiles(filepath, metrics);
-        this.checkLintingConfig(filepath, metrics);
-        this.checkTypeScript(filepath, metrics);
-        this.analyzePackageJson(filepath, content, metrics);
-    }
-
-    checkTestFiles(filepath, metrics) {
-        if (filepath.includes('test') || filepath.includes('spec') || filepath.includes('jest')) {
+        // Test files
+        if (/test|spec|jest/.test(filepath)) {
             metrics.quality.hasTests = true;
             metrics.quality.testFiles++;
         }
-    }
-
-    checkLintingConfig(filepath, metrics) {
-        if (filepath.includes('eslint') || filepath.includes('prettier')) {
+        
+        // Linting
+        if (/eslint|prettier/.test(filepath)) {
             metrics.quality.hasLinting = true;
         }
-    }
-
-    checkTypeScript(filepath, metrics) {
-        if (filepath.endsWith('.ts') || filepath.endsWith('.tsx') || filepath.includes('tsconfig')) {
+        
+        // TypeScript
+        if (/\.(ts|tsx)$|tsconfig/.test(filepath)) {
             metrics.quality.hasTypeScript = true;
         }
-    }
-
-    analyzePackageJson(filepath, content, metrics) {
+        
+        // Package.json
         if (filepath.endsWith('package.json')) {
             try {
                 const pkg = JSON.parse(content);

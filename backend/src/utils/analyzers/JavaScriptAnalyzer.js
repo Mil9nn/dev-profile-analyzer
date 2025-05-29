@@ -25,46 +25,29 @@ class JavaScriptAnalyzer {
             let maxNesting = 0;
 
             traverseAST(ast, {
-                // Function Analysis
-                FunctionDeclaration: (path) => {
+                'FunctionDeclaration|ArrowFunctionExpression': (path) => {
                     functionCount++;
                     const lines = this.getFunctionLines(path.node);
                     totalFunctionLines += lines;
-
                     this.componentDetector.checkReactComponent(path.node, content, filepath, metrics);
                 },
 
-                ArrowFunctionExpression: (path) => {
-                    functionCount++;
-                    const lines = this.getFunctionLines(path.node);
-                    totalFunctionLines += lines;
-
-                    this.componentDetector.checkReactComponent(path.node, content, filepath, metrics);
-                },
-
-                // API and Pattern Detection
                 CallExpression: (path) => {
                     this.detectExpressRoutes(path.node, filepath, metrics);
                     this.detectPatterns(path.node, metrics);
                 },
 
-                // Import Analysis
                 ImportDeclaration: (path) => {
                     this.importAnalyzer.analyzeImport(path.node.source.value, metrics);
                 },
 
-                // Complexity Analysis
-                IfStatement: () => metrics.complexity.cyclomaticComplexity++,
-                WhileStatement: () => metrics.complexity.cyclomaticComplexity++,
-                ForStatement: () => metrics.complexity.cyclomaticComplexity++,
-                ConditionalExpression: () => metrics.complexity.cyclomaticComplexity++,
+                'IfStatement|WhileStatement|ForStatement|ConditionalExpression': () => {
+                    metrics.complexity.cyclomaticComplexity++;
+                },
 
-                // Nesting Analysis
                 enter: (path) => {
                     const depth = this.getPathDepth(path);
-                    if (depth > maxNesting) {
-                        maxNesting = depth;
-                    }
+                    if (depth > maxNesting) maxNesting = depth;
                 }
             });
 
@@ -79,76 +62,48 @@ class JavaScriptAnalyzer {
     }
 
     detectExpressRoutes(node, filepath, metrics) {
-        if (!node.callee || node.callee.type !== 'MemberExpression') {
-            return false;
-        }
+        if (node.callee?.type !== 'MemberExpression') return;
 
-        const methodName = node.callee.property?.name;
+        const method = node.callee.property?.name;
+        const obj = node.callee.object?.name;
         const httpMethods = ['get', 'post', 'put', 'delete', 'patch', 'use', 'all'];
         
-        if (!httpMethods.includes(methodName)) {
-            return false;
-        }
-
-        const objectName = node.callee.object?.name;
-        const hasStringArg = node.arguments.length > 0 && 
-                           (node.arguments[0].type === 'StringLiteral' || 
-                            node.arguments[0].type === 'Literal');
-
-        if ((objectName === 'app' || objectName === 'router' || objectName === 'express') && hasStringArg) {
-            const route = this.extractRoutePattern(node);
+        if (httpMethods.includes(method) && 
+            ['app', 'router', 'express'].includes(obj) && 
+            node.arguments.length > 0 && 
+            (node.arguments[0].type === 'StringLiteral' || node.arguments[0].type === 'Literal')) {
+            
+            const route = node.arguments[0].value || node.arguments[0].raw || '/';
             
             metrics.architecture.apiEndpoints.push({
-                method: methodName.toUpperCase(),
-                route: route,
+                method: method.toUpperCase(),
+                route,
                 file: filepath
             });
             
             metrics.technologies.frameworks.add('Express.js');
-            console.log(`✅ Detected API endpoint: ${methodName.toUpperCase()} ${route} in ${filepath}`);
-            return true;
+            console.log(`✅ Detected API endpoint: ${method.toUpperCase()} ${route} in ${filepath}`);
         }
-        
-        return false;
     }
 
     detectPatterns(node, metrics) {
-        // API Calls
-        if (node.callee.name === 'fetch' ||
-            (node.callee.object && node.callee.object.name === 'axios')) {
+        if (node.callee.name === 'fetch' || node.callee.object?.name === 'axios') {
             metrics.technologies.patterns.add('API Calls');
         }
-
-        // React Hooks
-        if (node.callee.name && node.callee.name.startsWith('use')) {
+        if (node.callee.name?.startsWith('use')) {
             metrics.technologies.patterns.add('React Hooks');
         }
     }
 
-    extractRoutePattern(node) {
-        if (node.arguments.length > 0) {
-            const firstArg = node.arguments[0];
-            if (firstArg.type === 'StringLiteral' || firstArg.type === 'Literal') {
-                return firstArg.value || firstArg.raw || '/';
-            }
-        }
-        return '/';
-    }
-
     getFunctionLines(node) {
-        if (node.loc) {
-            return node.loc.end.line - node.loc.start.line + 1;
-        }
-        return 10; // default estimate
+        return node.loc ? node.loc.end.line - node.loc.start.line + 1 : 10;
     }
 
     getPathDepth(path) {
         let depth = 0;
         let current = path;
-        while (current && current.parent) {
-            if (current.node && (current.node.type === 'BlockStatement' || 
-                current.node.type === 'FunctionDeclaration' || 
-                current.node.type === 'ArrowFunctionExpression')) {
+        while (current?.parent) {
+            if (current.node && ['BlockStatement', 'FunctionDeclaration', 'ArrowFunctionExpression'].includes(current.node.type)) {
                 depth++;
             }
             current = current.parent;
