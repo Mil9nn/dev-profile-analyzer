@@ -1,6 +1,6 @@
-// ProperComponentArchitectureDetector.js
+// backend/src/utils/analyzers/ComponentDetector.js
 
-class ComponentArchitectureDetector {
+class ComponentDetector {
     constructor() {
         this.components = new Map();
         this.componentRelationships = [];
@@ -11,6 +11,183 @@ class ComponentArchitectureDetector {
         };
     }
 
+    // Method that JavaScriptAnalyzer is looking for
+    checkReactComponent(node, content, filepath, metrics) {
+        if (this.isReactComponent(node, content)) {
+            const componentInfo = this.extractReactComponentInfo(node, content, filepath);
+            if (componentInfo) {
+                metrics.architecture.components.push(componentInfo);
+                console.log(`✅ Detected React component: ${componentInfo.name} in ${filepath}`);
+            }
+        }
+    }
+
+    isReactComponent(node, content) {
+        // Check if this is a React component
+        return (
+            // Function component returning JSX
+            this.isFunctionReturningJSX(node, content) ||
+            // Class component extending React.Component
+            this.isClassComponent(node, content) ||
+            // Arrow function returning JSX
+            this.isArrowFunctionReturningJSX(node, content)
+        );
+    }
+
+    isFunctionReturningJSX(node, content) {
+        if (node.type !== 'FunctionDeclaration') return false;
+        
+        // Check if function name starts with capital letter (React convention)
+        const name = node.id?.name;
+        if (!name || name[0] !== name[0].toUpperCase()) return false;
+        
+        // Check if content contains JSX patterns
+        return this.containsJSX(content);
+    }
+
+    isClassComponent(node, content) {
+        if (node.type !== 'ClassDeclaration') return false;
+        
+        // Check if extends React.Component or Component
+        const superClass = node.superClass;
+        if (superClass) {
+            const superClassName = superClass.name || 
+                (superClass.property && superClass.property.name);
+            return superClassName === 'Component' || 
+                   superClassName === 'PureComponent';
+        }
+        
+        return false;
+    }
+
+    isArrowFunctionReturningJSX(node, content) {
+        if (node.type !== 'ArrowFunctionExpression') return false;
+        
+        // Check if this arrow function is assigned to a capitalized variable
+        const parent = node.parent;
+        if (parent && parent.type === 'VariableDeclarator') {
+            const name = parent.id?.name;
+            if (name && name[0] === name[0].toUpperCase()) {
+                return this.containsJSX(content);
+            }
+        }
+        
+        return false;
+    }
+
+    containsJSX(content) {
+        return (
+            // JSX elements
+            /<[A-Z][a-zA-Z0-9]*/.test(content) ||
+            // JSX fragments
+            /<>|<\/>/.test(content) ||
+            // Common JSX patterns
+            /return\s*\(?\s*</.test(content) ||
+            // JSX with props
+            /<\w+\s+\w+={/.test(content)
+        );
+    }
+
+    extractReactComponentInfo(node, content, filepath) {
+        const name = this.getComponentName(node, filepath);
+        
+        return {
+            name,
+            type: this.getComponentType(node),
+            filepath,
+            hasProps: this.hasPropsParameter(node, content),
+            hasState: this.hasState(content),
+            hasHooks: this.hasHooks(content),
+            size: this.getComponentSize(node),
+            dependencies: this.getComponentDependencies(content)
+        };
+    }
+
+    getComponentName(node, filepath) {
+        // Try to get name from node
+        if (node.id && node.id.name) {
+            return node.id.name;
+        }
+        
+        // Try to get name from variable declarator (for arrow functions)
+        if (node.parent && node.parent.type === 'VariableDeclarator') {
+            return node.parent.id.name;
+        }
+        
+        // Fallback to filename
+        const filename = filepath.split('/').pop().replace(/\.(jsx?|tsx?)$/, '');
+        return filename.charAt(0).toUpperCase() + filename.slice(1);
+    }
+
+    getComponentType(node) {
+        if (node.type === 'FunctionDeclaration') return 'Function Component';
+        if (node.type === 'ArrowFunctionExpression') return 'Arrow Function Component';
+        if (node.type === 'ClassDeclaration') return 'Class Component';
+        return 'Unknown';
+    }
+
+    hasPropsParameter(node, content) {
+        // Check function parameters
+        if (node.params && node.params.length > 0) {
+            const firstParam = node.params[0];
+            return firstParam.name === 'props' || firstParam.type === 'ObjectPattern';
+        }
+        
+        // Check content for props usage
+        return /\bprops\.|{[^}]*}.*=/.test(content);
+    }
+
+    hasState(content) {
+        return (
+            // Class component state
+            /this\.state/.test(content) ||
+            // useState hook
+            /useState\(/.test(content) ||
+            // useReducer hook
+            /useReducer\(/.test(content)
+        );
+    }
+
+    hasHooks(content) {
+        const hookPatterns = [
+            /useState\(/,
+            /useEffect\(/,
+            /useContext\(/,
+            /useReducer\(/,
+            /useCallback\(/,
+            /useMemo\(/,
+            /useRef\(/,
+            /use[A-Z]\w+\(/  // Custom hooks
+        ];
+        
+        return hookPatterns.some(pattern => pattern.test(content));
+    }
+
+    getComponentSize(node) {
+        if (node.loc) {
+            return node.loc.end.line - node.loc.start.line + 1;
+        }
+        return 0;
+    }
+
+    getComponentDependencies(content) {
+        const dependencies = [];
+        
+        // Extract import statements
+        const importRegex = /import\s+(?:{[^}]*}|\w+)\s+from\s+['"]([^'"]+)['"]/g;
+        let match;
+        
+        while ((match = importRegex.exec(content)) !== null) {
+            const importPath = match[1];
+            if (!importPath.startsWith('.')) {
+                dependencies.push(importPath);
+            }
+        }
+        
+        return dependencies;
+    }
+
+    // Original methods from ComponentArchitectureDetector
     analyzeComponentArchitecture(files) {
         // Step 1: Identify actual components (not just JSX)
         this.identifyComponents(files);
@@ -73,17 +250,16 @@ class ComponentArchitectureDetector {
 
     extractComponentInfo(filepath, content) {
         try {
-            const ast = this.parseFile(content);
             const component = {
-                name: this.extractComponentName(filepath, ast),
-                hasProps: this.hasPropsInterface(ast, content),
-                isReusable: this.checkReusability(ast, content),
-                hasSingleResponsibility: this.checkSingleResponsibility(ast, content),
+                name: this.extractComponentName(filepath, content),
+                hasProps: this.hasPropsInterface(content),
+                isReusable: this.checkReusability(content),
+                hasSingleResponsibility: this.checkSingleResponsibility(content),
                 isIndependent: this.checkIndependence(content),
-                hasDefinedInterface: this.hasDefinedInterface(ast, content),
-                size: this.calculateComponentSize(ast),
-                dependencies: this.extractDependencies(ast),
-                exports: this.extractExports(ast)
+                hasDefinedInterface: this.hasDefinedInterface(content),
+                size: this.calculateComponentSize(content),
+                dependencies: this.extractDependencies(content),
+                exports: this.extractExports(content)
             };
             
             return component;
@@ -93,7 +269,25 @@ class ComponentArchitectureDetector {
         }
     }
 
-    hasPropsInterface(ast, content) {
+    extractComponentName(filepath, content) {
+        // Try to find export default component name
+        const exportMatch = content.match(/export\s+default\s+(\w+)/);
+        if (exportMatch) {
+            return exportMatch[1];
+        }
+        
+        // Try to find function/class component name
+        const componentMatch = content.match(/(?:function|class|const)\s+([A-Z]\w+)/);
+        if (componentMatch) {
+            return componentMatch[1];
+        }
+        
+        // Fallback to filename
+        const filename = filepath.split('/').pop().replace(/\.(jsx?|tsx?)$/, '');
+        return filename.charAt(0).toUpperCase() + filename.slice(1);
+    }
+
+    hasPropsInterface(content) {
         // Check for props parameter, PropTypes, TypeScript interfaces, etc.
         return (
             // Function component with props parameter
@@ -110,14 +304,14 @@ class ComponentArchitectureDetector {
         );
     }
 
-    checkReusability(ast, content) {
+    checkReusability(content) {
         // Component is reusable if it:
         // 1. Accepts configuration through props
         // 2. Doesn't have hardcoded values
         // 3. Doesn't directly access global state
         // 4. Has generic naming
         
-        const hasConfigurableProps = this.hasPropsInterface(ast, content);
+        const hasConfigurableProps = this.hasPropsInterface(content);
         const hasHardcodedValues = this.countHardcodedValues(content) > 3;
         const accessesGlobalState = this.checksGlobalStateAccess(content);
         const hasGenericName = this.hasGenericComponentName(content);
@@ -125,9 +319,9 @@ class ComponentArchitectureDetector {
         return hasConfigurableProps && !hasHardcodedValues && !accessesGlobalState && hasGenericName;
     }
 
-    checkSingleResponsibility(ast, content) {
+    checkSingleResponsibility(content) {
         // Check if component has a single, clear responsibility
-        const functionCount = this.countInternalFunctions(ast);
+        const functionCount = this.countInternalFunctions(content);
         const stateVariables = this.countStateVariables(content);
         const componentSize = content.split('\n').length;
         
@@ -154,7 +348,7 @@ class ComponentArchitectureDetector {
         return !hasParentCoupling && !hasRoutingCoupling && !hasServiceCoupling;
     }
 
-    hasDefinedInterface(ast, content) {
+    hasDefinedInterface(content) {
         // Check for clear component interface definition
         return (
             // TypeScript interfaces
@@ -170,6 +364,74 @@ class ComponentArchitectureDetector {
         );
     }
 
+    // Helper method implementations
+    countHardcodedValues(content) {
+        // Count string literals, magic numbers, etc.
+        const stringLiterals = (content.match(/["'`][^"'`]*["'`]/g) || []).length;
+        const numbers = (content.match(/\b\d+\b/g) || []).length;
+        return stringLiterals + numbers;
+    }
+
+    checksGlobalStateAccess(content) {
+        return /useSelector|connect|vuex|store\./i.test(content);
+    }
+
+    hasGenericComponentName(content) {
+        // Check if component name is not too specific to one use case
+        const specificPatterns = /UserProfile|LoginForm|CheckoutButton|HomePage/;
+        return !specificPatterns.test(content);
+    }
+
+    countInternalFunctions(content) {
+        // Count function declarations inside component
+        const functionMatches = content.match(/function\s+\w+|const\s+\w+\s*=\s*(?:\([^)]*\)\s*=>|function)/g) || [];
+        return functionMatches.length;
+    }
+
+    countStateVariables(content) {
+        const useState = (content.match(/useState\(/g) || []).length;
+        const data = (content.match(/data\(\)/g) || []).length;
+        return useState + data;
+    }
+
+    hasMixedConcerns(content) {
+        const hasDataFetching = /fetch\(|axios\.|useEffect.*fetch/s.test(content);
+        const hasBusinessLogic = /calculate|validate|process|transform/i.test(content);
+        const hasUILogic = /render|return.*</s.test(content);
+        
+        // Mixed concerns if it has multiple types
+        return [hasDataFetching, hasBusinessLogic, hasUILogic].filter(Boolean).length > 1;
+    }
+
+    extractDependencies(content) {
+        const dependencies = [];
+        const importRegex = /import\s+(?:{[^}]*}|\w+)\s+from\s+['"]([^'"]+)['"]/g;
+        let match;
+        
+        while ((match = importRegex.exec(content)) !== null) {
+            dependencies.push(match[1]);
+        }
+        
+        return dependencies;
+    }
+
+    extractExports(content) {
+        const exports = [];
+        const exportRegex = /export\s+(?:default\s+)?(?:function|class|const)\s+(\w+)/g;
+        let match;
+        
+        while ((match = exportRegex.exec(content)) !== null) {
+            exports.push(match[1]);
+        }
+        
+        return exports;
+    }
+
+    calculateComponentSize(content) {
+        return content.split('\n').length;
+    }
+
+    // Additional methods for component architecture analysis
     analyzeComponentRelationships(files) {
         for (const [filepath, content] of Object.entries(files)) {
             const imports = this.extractComponentImports(content);
@@ -211,11 +473,7 @@ class ComponentArchitectureDetector {
     }
 
     analyzeSeparationOfConcerns() {
-        // Check if components properly separate:
-        // 1. Presentation logic from business logic
-        // 2. State management from UI rendering
-        // 3. Data fetching from component rendering
-        
+        // Check if components properly separate concerns
         const concerns = {
             presentation: 0,
             business: 0,
@@ -237,12 +495,7 @@ class ComponentArchitectureDetector {
     }
 
     analyzeComponentComposition() {
-        // Check for proper composition patterns:
-        // 1. Higher-order components
-        // 2. Render props
-        // 3. Component composition over inheritance
-        // 4. Proper prop drilling vs context usage
-        
+        // Check for proper composition patterns
         const compositionPatterns = {
             higherOrderComponents: 0,
             renderProps: 0,
@@ -251,17 +504,14 @@ class ComponentArchitectureDetector {
             deepPropDrilling: 0
         };
         
-        this.components.forEach((component, filepath) => {
-            // Analyze each component for composition patterns
-            // This would require more detailed AST analysis
-        });
-        
+        // This would require more detailed analysis
         return compositionPatterns;
     }
 
     generateArchitectureScore() {
         const totalComponents = this.components.size;
-        const reusedPercentage = this.reusabilityMetrics.reusedComponents.size / totalComponents;
+        const reusedPercentage = totalComponents > 0 ? 
+            this.reusabilityMetrics.reusedComponents.size / totalComponents : 0;
         const separationAnalysis = this.analyzeSeparationOfConcerns();
         
         let score = 1; // Base score
@@ -281,10 +531,6 @@ class ComponentArchitectureDetector {
         // Separation of concerns bonus
         if (separationAnalysis.separationScore === 'Good') score += 1;
         
-        // Component composition patterns
-        const compositionScore = this.analyzeComponentComposition();
-        if (this.hasGoodCompositionPatterns(compositionScore)) score += 1;
-        
         return {
             score: Math.min(score, 10),
             totalComponents,
@@ -297,59 +543,34 @@ class ComponentArchitectureDetector {
         };
     }
 
-    // Helper methods (simplified implementations)
-    parseFile(content) {
-        // Would use appropriate parser based on file type
-        return {}; // Placeholder
-    }
-
-    countHardcodedValues(content) {
-        // Count string literals, magic numbers, etc.
-        const stringLiterals = (content.match(/["'`][^"'`]*["'`]/g) || []).length;
-        const numbers = (content.match(/\b\d+\b/g) || []).length;
-        return stringLiterals + numbers;
-    }
-
-    checksGlobalStateAccess(content) {
-        return /useSelector|connect|vuex|store\./i.test(content);
-    }
-
-    hasGenericComponentName(content) {
-        // Check if component name is not too specific to one use case
-        const specificPatterns = /UserProfile|LoginForm|CheckoutButton|HomePage/;
-        return !specificPatterns.test(content);
-    }
-
-    countInternalFunctions(ast) {
-        // Count function declarations inside component
-        return 0; // Placeholder
-    }
-
-    countStateVariables(content) {
-        const useState = (content.match(/useState\(/g) || []).length;
-        const data = (content.match(/data\(\)/g) || []).length;
-        return useState + data;
-    }
-
-    hasMixedConcerns(content) {
-        const hasDataFetching = /fetch\(|axios\.|useEffect.*fetch/s.test(content);
-        const hasBusinessLogic = /calculate|validate|process|transform/i.test(content);
-        const hasUILogic = /render|return.*</s.test(content);
-        
-        // Mixed concerns if it has multiple types
-        return [hasDataFetching, hasBusinessLogic, hasUILogic].filter(Boolean).length > 1;
-    }
-
+    // Helper methods
     extractComponentImports(content) {
         const imports = [];
-        const importMatches = content.matchAll(/import\s+(?:{[^}]*}|\w+)\s+from\s+['"][^'"]*['"]/g);
+        const importRegex = /import\s+(?:{[^}]*}|(\w+))\s+from\s+['"]([^'"]+)['"]/g;
+        let match;
         
-        for (const match of importMatches) {
-            // Extract component names from imports
-            // This would need more sophisticated parsing
+        while ((match = importRegex.exec(content)) !== null) {
+            const importedName = match[1];
+            const importPath = match[2];
+            
+            // Check if it's a component import (starts with capital letter)
+            if (importedName && importedName[0] === importedName[0].toUpperCase()) {
+                imports.push(importedName);
+            }
         }
         
         return imports;
+    }
+
+    getComponentNameFromPath(filepath) {
+        const filename = filepath.split('/').pop().replace(/\.(jsx?|tsx?)$/, '');
+        return filename.charAt(0).toUpperCase() + filename.slice(1);
+    }
+
+    identifyPrimaryConcern(component) {
+        // Analyze component to identify its primary concern
+        // This is a simplified implementation
+        return 'presentation'; // Default to presentation
     }
 
     averageComponentQuality() {
@@ -381,10 +602,8 @@ class ComponentArchitectureDetector {
             patterns.push('Component Composition');
         }
         
-        // Add more pattern detection based on analysis
-        
         return patterns;
     }
 }
 
-export default ComponentArchitectureDetector;
+export default ComponentDetector;
