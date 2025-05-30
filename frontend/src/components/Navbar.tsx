@@ -8,9 +8,9 @@ export default function Navbar() {
           <Target className="w-5 h-5 text-white" />
           <span className="text-white font-mono">DevProfile Analyzer</span>
         </a>
-        <div className="hidden md:flex gap-6">
+        <div className="hidden md:flex items-center gap-6">
           <a href="#" className="text-slate-200 hover:text-white">Sign in</a>
-          <a href="#" className="px-3 py-1.5 bg-purple-600 text-white rounded-md hover:bg-purple-700">
+          <a href="#" className="px-4 py-1.5 bg-purple-600 text-white rounded-full hover:bg-purple-700">
             Sign up
           </a>
         </div>

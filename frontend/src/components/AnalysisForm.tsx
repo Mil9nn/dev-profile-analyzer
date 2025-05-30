@@ -20,7 +20,7 @@ export function AnalysisForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-md bg-zinc-800 p-6 rounded-lg space-y-4">
+    <form onSubmit={handleSubmit} className="max-w-md bg-zinc-800 p-6 rounded-md space-y-4">
       <div>
         <label className="block text-sm font-medium text-white mb-2">GitHub Profile</label>
         <input

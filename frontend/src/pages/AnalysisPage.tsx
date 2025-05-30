@@ -66,10 +66,10 @@ export default function AnalysisPage() {
   return (
     <div className="min-h-screen bg-zinc-900 text-white">
       <Navbar />
-      <div className="container mx-auto px-6 py-12">
+      <div className="container mx-auto p-6">
         <div className="grid lg:grid-cols-2 gap-8">
           <div>
-            <h1 className="text-3xl font-bold mb-6">Profile Analysis</h1>
+            <h1 className="text-3xl font-bold mb-3">Profile Analysis</h1>
             <AnalysisForm />
           </div>
           
