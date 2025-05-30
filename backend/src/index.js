@@ -7,7 +7,10 @@ import { OpenAI } from "openai";
 dotenv.config();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173', // Adjust for your frontend port
+  credentials: true
+}));
 app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -132,7 +135,6 @@ function calculateScore(stats) {
     return Math.min(Math.round(score * 10) / 10, 10);
 }
 
-// Updated prompt to return structured JSON
 function createPrompt(stats, score) {
     const techList = Array.from(stats.technologies).join(', ') || 'Basic JavaScript';
     
@@ -164,23 +166,28 @@ Be realistic - most projects score 4-6/10. Return only valid JSON.`;
 
 // Main analysis endpoint with progress updates
 app.post("/api/analyze", async (req, res) => {
+    console.log('Received analysis request:', req.body); // Debug log
+    
     try {
         const { repositories } = req.body;
         if (!repositories || repositories.length === 0) {
             return res.status(400).json({ success: false, error: "No repositories provided" });
         }
 
-        // Use Server-Sent Events for progress updates
+        // Set up Server-Sent Events headers
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive',
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Cache-Control'
+            'Access-Control-Allow-Headers': 'Cache-Control, Content-Type',
+            'Access-Control-Allow-Methods': 'POST'
         });
 
         const sendProgress = (stage, data = {}) => {
-            res.write(`data: ${JSON.stringify({ stage, ...data })}\n\n`);
+            const message = JSON.stringify({ stage, ...data });
+            console.log('Sending progress:', message); // Debug log
+            res.write(`data: ${message}\n\n`);
         };
 
         // Process all valid repositories
@@ -196,7 +203,9 @@ app.post("/api/analyze", async (req, res) => {
                 allFiles = { ...allFiles, ...files };
                 sendProgress('fetched', { repo, fileCount: Object.keys(files).length });
             } catch (err) {
+                console.error(`Error fetching ${repo}:`, err);
                 sendProgress('error', { repo, error: err.message });
+                continue; // Continue with other repos
             }
         }
         
@@ -210,40 +219,35 @@ app.post("/api/analyze", async (req, res) => {
         const score = calculateScore(stats);
         
         sendProgress('ai-processing');
-        const prompt = createPrompt(stats, score);
-
-        const chat = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                {
-                    role: "system",
-                    content: "You are a senior software engineer. Return only valid JSON matching the requested structure."
-                },
-                { role: "user", content: prompt }
-            ],
-            temperature: 0.2,
-            max_tokens: 1000
-        });
-
+        
         let aiFeedback;
-        try {
-            aiFeedback = JSON.parse(chat.choices[0].message.content);
-        } catch (parseErr) {
-            // Fallback if AI doesn't return valid JSON
-            aiFeedback = {
-                score: score,
-                rationale: [`Based on ${stats.totalFiles} files and ${Array.from(stats.technologies).join(', ')}`],
-                technologies: Array.from(stats.technologies),
-                strengths: ["Code organization", "Technology stack"],
-                weaknesses: ["Could improve documentation"],
-                improvements: ["Add more tests", "Improve error handling"],
-                hiringPotential: {
-                    level: score >= 7 ? "Senior" : score >= 5 ? "Mid" : "Junior",
-                    details: "Assessment based on code complexity and structure",
-                    watchAreas: ["Testing", "Documentation"]
-                },
-                conclusion: `${score}/10 - Shows ${score >= 6 ? 'good' : 'basic'} development skills`
-            };
+        
+        // Try AI analysis if OpenAI is configured
+        if (process.env.OPENAI_API_KEY) {
+            try {
+                const prompt = createPrompt(stats, score);
+                const chat = await openai.chat.completions.create({
+                    model: "gpt-4o-mini",
+                    messages: [
+                        {
+                            role: "system",
+                            content: "You are a senior software engineer. Return only valid JSON matching the requested structure."
+                        },
+                        { role: "user", content: prompt }
+                    ],
+                    temperature: 0.2,
+                    max_tokens: 1000
+                });
+
+                aiFeedback = JSON.parse(chat.choices[0].message.content);
+            } catch (aiErr) {
+                console.error('AI analysis failed:', aiErr);
+                // Fall back to basic analysis
+                aiFeedback = createFallbackAnalysis(stats, score);
+            }
+        } else {
+            // Use fallback if no OpenAI key
+            aiFeedback = createFallbackAnalysis(stats, score);
         }
 
         sendProgress('complete', {
@@ -262,9 +266,57 @@ app.post("/api/analyze", async (req, res) => {
 
     } catch (err) {
         console.error("Analysis error:", err);
-        res.write(`data: ${JSON.stringify({ stage: 'error', error: err.message })}\n\n`);
-        res.end();
+        try {
+            res.write(`data: ${JSON.stringify({ stage: 'error', error: err.message })}\n\n`);
+            res.end();
+        } catch (writeErr) {
+            console.error("Failed to send error response:", writeErr);
+        }
     }
+});
+
+// Fallback analysis function
+function createFallbackAnalysis(stats, score) {
+    return {
+        score: score,
+        rationale: [
+            `Analyzed ${stats.totalFiles} files with ${stats.totalLines} lines of code`,
+            `Found ${stats.components} components and ${stats.apiEndpoints} API endpoints`,
+            `Uses ${stats.technologies.size} different technologies`
+        ],
+        technologies: Array.from(stats.technologies),
+        strengths: [
+            stats.hasTypeScript ? "Uses TypeScript for better code quality" : "Functional JavaScript implementation",
+            stats.components > 5 ? "Good component organization" : "Basic project structure",
+            stats.technologies.size > 3 ? "Diverse technology stack" : "Focused technology approach"
+        ],
+        weaknesses: [
+            !stats.hasTests ? "No test files detected" : "Limited test coverage",
+            stats.totalFiles < 10 ? "Small project scope" : "Could improve documentation",
+            "Consider adding more error handling"
+        ],
+        improvements: [
+            "Add comprehensive test coverage",
+            "Improve code documentation",
+            "Consider adding TypeScript if not already used",
+            "Implement better error handling patterns"
+        ],
+        hiringPotential: {
+            level: score >= 7 ? "Senior" : score >= 5 ? "Mid" : score >= 3 ? "Junior" : "Entry Level",
+            details: `Based on the analysis of ${stats.totalFiles} files and ${Array.from(stats.technologies).join(', ')} technologies, this profile shows ${score >= 6 ? 'strong' : score >= 4 ? 'decent' : 'basic'} development skills.`,
+            watchAreas: [
+                !stats.hasTests ? "Testing practices" : "Test coverage expansion",
+                stats.totalFiles < 10 ? "Project complexity" : "Code organization",
+                "Documentation and code comments"
+            ]
+        },
+        conclusion: `${score}/10 - ${score >= 7 ? 'Excellent' : score >= 5 ? 'Good' : score >= 3 ? 'Decent' : 'Basic'} developer profile with room for growth in testing and documentation.`
+    };
+}
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
 const PORT = process.env.PORT || 5000;

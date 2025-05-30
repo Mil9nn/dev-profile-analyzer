@@ -48,51 +48,84 @@ export function useAnalysis() {
   const [progress, setProgress] = useState<ProgressUpdate | null>(null)
 
   const analyzeProfile = async (data: FormData) => {
+    console.log('Starting analysis with data:', data) // Debug log
+    
     setLoading(true)
     setError('')
     setResult(null)
     setProgress(null)
     
     try {
-      const eventSource = new EventSource(`http://localhost:5000/api/analyze`)
+      // Create EventSource for progress updates
+      const eventSource = new EventSource('http://localhost:5000/api/analyze', {
+        withCredentials: false
+      })
       
-      // Send the data via POST (we'll need to modify this)
-      fetch('http://localhost:5000/api/analyze', {
+      // Send the POST request with data
+      const response = await fetch('http://localhost:5000/api/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
         body: JSON.stringify(data)
       })
 
-      eventSource.onmessage = (event) => {
-        const update = JSON.parse(event.data)
-        setProgress(update)
+      console.log('Response status:', response.status) // Debug log
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      // Handle the streaming response
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No response body reader available')
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
         
-        if (update.stage === 'complete') {
-          if (update.success) {
-            setResult({
-              success: true,
-              aiFeedback: update.aiFeedback,
-              metrics: update.metrics
-            })
-          } else {
-            setError(update.error || 'Analysis failed')
+        if (done) break
+        
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const update = JSON.parse(line.slice(6))
+              console.log('Progress update:', update) // Debug log
+              setProgress(update)
+              
+              if (update.stage === 'complete') {
+                if (update.success) {
+                  setResult({
+                    success: true,
+                    aiFeedback: update.aiFeedback,
+                    metrics: update.metrics
+                  })
+                } else {
+                  setError(update.error || 'Analysis failed')
+                }
+                setLoading(false)
+                return
+              } else if (update.stage === 'error') {
+                setError(update.error || 'Analysis failed')
+                setLoading(false)
+                return
+              }
+            } catch (parseErr) {
+              console.error('Failed to parse progress update:', parseErr)
+            }
           }
-          setLoading(false)
-          eventSource.close()
-        } else if (update.stage === 'error') {
-          setError(update.error || 'Analysis failed')
-          setLoading(false)
-          eventSource.close()
         }
       }
 
-      eventSource.onerror = () => {
-        setError('Connection error')
-        setLoading(false)
-        eventSource.close()
-      }
-
     } catch (err: any) {
+      console.error('Analysis error:', err) // Debug log
       setError(err.message || 'Analysis failed')
       setLoading(false)
     }
