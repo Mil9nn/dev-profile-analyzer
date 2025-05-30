@@ -48,7 +48,7 @@ export function useAnalysis() {
   const [progress, setProgress] = useState<ProgressUpdate | null>(null)
 
   const analyzeProfile = async (data: FormData) => {
-    console.log('Starting analysis with data:', data) // Debug log
+    console.log('Starting analysis with data:', data)
     
     setLoading(true)
     setError('')
@@ -56,22 +56,16 @@ export function useAnalysis() {
     setProgress(null)
     
     try {
-      // Create EventSource for progress updates
-      const eventSource = new EventSource('http://localhost:5000/api/analyze', {
-        withCredentials: false
-      })
-      
-      // Send the POST request with data
+      // Make POST request to trigger analysis
       const response = await fetch('http://localhost:5000/api/analyze', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(data)
       })
 
-      console.log('Response status:', response.status) // Debug log
+      console.log('Response status:', response.status)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -97,7 +91,7 @@ export function useAnalysis() {
           if (line.startsWith('data: ')) {
             try {
               const update = JSON.parse(line.slice(6))
-              console.log('Progress update:', update) // Debug log
+              console.log('Progress update:', update)
               setProgress(update)
               
               if (update.stage === 'complete') {
@@ -125,7 +119,7 @@ export function useAnalysis() {
       }
 
     } catch (err: any) {
-      console.error('Analysis error:', err) // Debug log
+      console.error('Analysis error:', err)
       setError(err.message || 'Analysis failed')
       setLoading(false)
     }

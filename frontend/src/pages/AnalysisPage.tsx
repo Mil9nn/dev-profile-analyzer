@@ -4,11 +4,14 @@ import Navbar from '../components/Navbar'
 import { AnalysisForm } from '../components/AnalysisForm'
 import { ResultsDisplay } from '../components/ResultsDisplay'
 import { EmptyState } from '../components/states/EmptyState'
-import { useAnalysis } from '../hooks/useAnalysis'
+import { AnalysisProvider, useAnalysisContext } from '../contexts/AnalysisContext'
+import { type ProgressUpdate } from '../hooks/useAnalysis'
 
-function ProgressDisplay() {
-  const { progress } = useAnalysis()
-  
+interface ProgressDisplayProps {
+  progress: ProgressUpdate | null
+}
+
+function ProgressDisplay({ progress }: ProgressDisplayProps) {
   if (!progress) return null
 
   const getIcon = () => {
@@ -60,8 +63,8 @@ function ProgressDisplay() {
   )
 }
 
-export default function AnalysisPage() {
-  const { loading, result, error } = useAnalysis()
+function AnalysisPageContent() {
+  const { loading, result, error, progress } = useAnalysisContext()
   
   return (
     <div className="min-h-screen bg-zinc-900 text-white">
@@ -79,7 +82,7 @@ export default function AnalysisPage() {
                 <p className="text-red-400">{error}</p>
               </div>
             ) : loading ? (
-              <ProgressDisplay />
+              <ProgressDisplay progress={progress} />
             ) : result ? (
               <ResultsDisplay result={result} />
             ) : (
@@ -89,5 +92,13 @@ export default function AnalysisPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function AnalysisPage() {
+  return (
+    <AnalysisProvider>
+      <AnalysisPageContent />
+    </AnalysisProvider>
   )
 }

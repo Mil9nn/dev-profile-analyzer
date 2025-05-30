@@ -43,11 +43,11 @@ export function ResultsDisplay({ result }: { result: AnalysisResult }) {
             <Code className="w-5 h-5 text-blue-400" />
             Technologies
           </h3>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex items-center flex-wrap gap-2">
             {aiFeedback.technologies.map((tech, i) => (
-              <span key={i} className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm">
+              <p key={i} className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm">
                 {tech}
-              </span>
+              </p>
             ))}
           </div>
         </div>

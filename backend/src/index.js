@@ -8,18 +8,17 @@ dotenv.config();
 
 const app = express();
 app.use(cors({
-  origin: 'http://localhost:5173', // Adjust for your frontend port
-  credentials: true
+    origin: 'http://localhost:5173', // Adjust for your frontend port
+    credentials: true
 }));
 app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Simplified file fetcher
 async function fetchRepoFiles(repoUrl) {
     const [owner, repo] = repoUrl.split("github.com/")[1].split("/");
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`;
-    
+
     const headers = {
         Accept: "application/vnd.github.v3+json",
         Authorization: `Bearer ${process.env.GITHUB_TOKEN}`
@@ -27,17 +26,45 @@ async function fetchRepoFiles(repoUrl) {
 
     const treeRes = await fetch(apiUrl, { headers });
     if (!treeRes.ok) throw new Error(`Failed to fetch repo: ${treeRes.status}`);
-
     const data = await treeRes.json();
-    
-    const codeFiles = data.tree.filter(file => 
-        file.type === "blob" && 
-        /\.(js|jsx|ts|tsx|json)$/.test(file.path) && 
+
+    const allFiles = data.tree.filter(file =>
+        file.type === "blob" &&
+        /\.(js|jsx|ts|tsx|json)$/.test(file.path) &&
         !/(node_modules|dist|build|\.git|public|assets)/.test(file.path)
-    ).slice(0, 15);
+    );
+
+    // Priority list for frontend and backend
+    const frontendPriority = [
+        'package.json', 'vite.config.js', 'webpack.config.js',
+        'index.html', 'public/index.html',
+        'src/main.js', 'src/main.jsx', 'src/index.js', 'src/index.jsx',
+        'src/App.js', 'src/App.jsx',
+        'src/components/', 'src/pages/', 'src/hooks/', 'src/context/', 'store/',
+        'tailwind.config.js', 'postcss.config.js'
+    ];
+
+    const backendPriority = [
+        'server.js', 'index.js', 'app.js',
+        'routes/', 'controllers/', 'models/', 'config/', 'middlewares/',
+        '.env.example', '.env.sample'
+    ];
+
+    const sortByPriority = (files, priorityList) => {
+        return files.sort((a, b) => {
+            const aIndex = priorityList.findIndex(p => a.path.includes(p));
+            const bIndex = priorityList.findIndex(p => b.path.includes(p));
+            return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+        });
+    };
+
+    const frontendFiles = sortByPriority([...allFiles], frontendPriority).slice(0, 20);
+    const backendFiles = sortByPriority([...allFiles], backendPriority).slice(0, 20);
+
+    const selectedFiles = [...frontendFiles, ...backendFiles];
 
     const files = {};
-    for (const file of codeFiles) {
+    for (const file of selectedFiles) {
         const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/${file.path}`;
         try {
             const rawRes = await fetch(rawUrl, { headers });
@@ -55,7 +82,43 @@ async function fetchRepoFiles(repoUrl) {
     return files;
 }
 
+// Replace the existing import extraction logic in analyzeProject function with this:
+
 function analyzeProject(files) {
+    const devOnlyPatterns = [
+        /^eslint(-|$)/,
+        /^@eslint\//,
+        /^@vitejs\//,
+        /^@tailwindcss\//,
+        /^vite$/,
+        /^globals$/,
+        /^stylelint/,
+        /^postcss/,
+        /^autoprefixer/,
+        /^prettier$/,
+        /^typescript$/,
+        /^tslib$/,
+        /^babel(-|$)/,
+        /^webpack/,
+        /^rollup/,
+        /^parcel/,
+        /^serve$/,
+        /^nodemon$/,
+        /^concurrently$/,
+        /^cross-env$/,
+        /^husky$/,
+        /^lint-staged$/,
+        /^@babel\//,
+        /-loader$/,
+        /^path$/,
+        /^http$/,
+        /^fs$/,
+        /^os$/,
+        /^url$/,
+        /^stream$/,
+        /^zlib$/
+    ];
+
     const stats = {
         totalFiles: Object.keys(files).length,
         components: 0,
@@ -67,37 +130,88 @@ function analyzeProject(files) {
         totalLines: 0
     };
 
+    const detectedLibs = new Set();
+
     for (const [path, content] of Object.entries(files)) {
         if (!content) continue;
 
         stats.totalLines += content.split('\n').length;
 
-        if (content.includes('react') || content.includes('React')) stats.technologies.add('React');
-        if (content.includes('express') || content.includes('Express')) stats.technologies.add('Express');
-        if (content.includes('mongoose') || content.includes('MongoDB')) stats.technologies.add('MongoDB');
-        if (content.includes('axios')) stats.technologies.add('Axios');
-        if (content.includes('cors')) stats.technologies.add('CORS');
-        if (content.includes('jwt') || content.includes('jsonwebtoken')) stats.technologies.add('JWT');
-        if (content.includes('bcrypt')) stats.technologies.add('Bcrypt');
-        if (content.includes('prisma')) stats.technologies.add('Prisma');
-        if (content.includes('next')) stats.technologies.add('Next.js');
-        if (content.includes('vue') || content.includes('Vue')) stats.technologies.add('Vue.js');
-        if (content.includes('tailwind')) stats.technologies.add('Tailwind');
+        // --- FIXED: Better import extraction ---
+        // Match import statements and extract package names more accurately
+        const importPatterns = [
+            // import something from 'package'
+            /import\s+(?:[^'"]*)\s+from\s+['"]([^'"]+)['"]/g,
+            // import 'package'
+            /import\s+['"]([^'"]+)['"]/g,
+            // require('package')
+            /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g
+        ];
 
+        importPatterns.forEach(pattern => {
+            let match;
+            while ((match = pattern.exec(content))) {
+                const lib = match[1];
+
+                // Skip relative imports (starting with . or /)
+                if (!lib.startsWith('.') && !lib.startsWith('/')) {
+                    // Extract clean package name
+                    const pkgName = lib.startsWith('@')
+                        ? lib.split('/').slice(0, 2).join('/') // @scope/package
+                        : lib.split('/')[0]; // package or package/submodule -> package
+
+                    // Filter out common non-library imports
+                    const invalidPatterns = [
+                        /^(src|components|pages|utils|hooks|context|store|api|services|config|constants|types|styles)/,
+                        /\.(js|jsx|ts|tsx|css|scss|json|svg|png|jpg)$/,
+                        /^[./]/
+                    ];
+
+                    const isValid = !invalidPatterns.some(pattern => pattern.test(pkgName)) &&
+                        !devOnlyPatterns.some(pattern => pattern.test(pkgName));
+
+                    if (isValid && pkgName.length > 0) {
+                        detectedLibs.add(pkgName);
+                    }
+                }
+            }
+        });
+
+        // --- Step 2: Check file name for tests or TS ---
         if (path.includes('test') || path.includes('spec')) stats.hasTests = true;
         if (path.endsWith('.ts') || path.endsWith('.tsx')) stats.hasTypeScript = true;
 
+        // --- Step 3: Count components ---
         const componentMatches = content.match(/(?:function|const|class)\s+[A-Z]\w*|export\s+(?:default\s+)?(?:function\s+)?[A-Z]\w*/g);
         if (componentMatches && content.includes('<')) {
             stats.components += componentMatches.length;
         }
 
+        // --- Step 4: Count API endpoints ---
         const apiMatches = content.match(/\.(get|post|put|delete|patch)\s*\(/g);
         if (apiMatches) stats.apiEndpoints += apiMatches.length;
 
-        const functionMatches = content.match(/(?:function|const\s+\w+\s*=|\w+\s*:\s*(?:async\s+)?(?:function|\([^)]*\)\s*=>))/g);
+        // --- Step 5: Count functions ---
+        const functionMatches = content.match(/(?:function\s+\w+|const\s+\w+\s*=\s*(async\s*)?\(?\s*\)?\s*=>|\w+\s*:\s*(async\s*)?function)/g);
         if (functionMatches) stats.functions += functionMatches.length;
     }
+
+    // --- Step 6: If package.json exists, extract dependencies ---
+    if (files['package.json']) {
+        try {
+            const pkg = JSON.parse(files['package.json']);
+            const deps = Object.keys({
+                ...pkg.dependencies,
+                ...pkg.devDependencies
+            });
+            deps.forEach(dep => detectedLibs.add(dep));
+        } catch (e) {
+            console.warn('Invalid package.json format');
+        }
+    }
+
+    // Add cleaned library names to technologies
+    detectedLibs.forEach(lib => stats.technologies.add(lib));
 
     return stats;
 }
@@ -136,14 +250,14 @@ function calculateScore(stats) {
 }
 
 function createPrompt(stats, score) {
-    const techList = Array.from(stats.technologies).join(', ') || 'Basic JavaScript';
-    
+    const techList = Array.from(stats.technologies) || 'Basic JavaScript';
+
     return `Analyze this GitHub repository and return a JSON response with the following structure:
 
 {
   "score": ${score},
   "rationale": ["reason1", "reason2"],
-  "technologies": [${JSON.stringify(Array.from(stats.technologies))}],
+  "technologies": ${JSON.stringify(Array.from(stats.technologies))},
   "strengths": ["strength1", "strength2"],
   "weaknesses": ["weakness1", "weakness2"],
   "improvements": ["improvement1", "improvement2"],
@@ -167,7 +281,7 @@ Be realistic - most projects score 4-6/10. Return only valid JSON.`;
 // Main analysis endpoint with progress updates
 app.post("/api/analyze", async (req, res) => {
     console.log('Received analysis request:', req.body); // Debug log
-    
+
     try {
         const { repositories } = req.body;
         if (!repositories || repositories.length === 0) {
@@ -193,11 +307,11 @@ app.post("/api/analyze", async (req, res) => {
         // Process all valid repositories
         const validRepos = repositories.filter(repo => repo && repo.trim());
         let allFiles = {};
-        
+
         for (let i = 0; i < validRepos.length; i++) {
             const repo = validRepos[i];
             sendProgress('fetching', { repo, index: i + 1, total: validRepos.length });
-            
+
             try {
                 const files = await fetchRepoFiles(repo);
                 allFiles = { ...allFiles, ...files };
@@ -208,7 +322,7 @@ app.post("/api/analyze", async (req, res) => {
                 continue; // Continue with other repos
             }
         }
-        
+
         if (Object.keys(allFiles).length === 0) {
             sendProgress('complete', { success: false, error: "No analyzable files found" });
             return res.end();
@@ -217,11 +331,11 @@ app.post("/api/analyze", async (req, res) => {
         sendProgress('analyzing');
         const stats = analyzeProject(allFiles);
         const score = calculateScore(stats);
-        
+
         sendProgress('ai-processing');
-        
+
         let aiFeedback;
-        
+
         // Try AI analysis if OpenAI is configured
         if (process.env.OPENAI_API_KEY) {
             try {
