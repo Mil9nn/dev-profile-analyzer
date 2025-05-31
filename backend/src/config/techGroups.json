@@ -1,0 +1,32 @@
+
+{
+  "groups": {
+    "react": ["react", "react-dom", "react-router", "@remix-run", "next"],
+    "typescript": ["typescript", "@typescript-eslint", "ts-node", "ts-jest"],
+    "vue": ["vue", "@vue", "nuxt"],
+    "radix-ui": ["@radix-ui"],
+    "clerk": ["@clerk"],
+    "tailwind": ["tailwindcss", "@tailwind", "tailwind-merge", "clsx", "class-variance-authority"],
+    "shadcn": ["@shadcn"],
+    "prisma": ["prisma", "@prisma"],
+    "trpc": ["@trpc"],
+    "zustand": ["zustand"],
+    "next-auth": ["next-auth", "@auth"],
+    "express": ["express", "@express"],
+    "nestjs": ["@nestjs"],
+    "mongodb": ["mongodb", "@mongodb"],
+    "postgres": ["pg", "postgres", "@neondatabase"],
+    "redis": ["redis", "@redis", "ioredis"],
+    "stripe": ["@stripe"],
+    "sentry": ["@sentry"],
+    "jest": ["jest", "@jest"],
+    "vitest": ["vitest", "@vitest"],
+    "playwright": ["@playwright"],
+    "vite": ["vite", "@vite"],
+    "webpack": ["webpack", "@webpack"]
+  },
+  "exceptions": {
+    "@tanstack/react-query": "react-query",
+    "auth.js": "next-auth"
+  }
+}

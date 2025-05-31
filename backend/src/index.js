@@ -3,6 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { OpenAI } from "openai";
+import complexity from 'cyclomatic-complexity';
+import { normalizeTech } from './utils/techNormalizer.js';
 
 dotenv.config();
 
@@ -15,206 +17,486 @@ app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-async function fetchRepoFiles(repoUrl) {
-    const [owner, repo] = repoUrl.split("github.com/")[1].split("/");
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`;
+// Helper functions
+const isConfigFile = (path) => 
+    /(config|\.env|settings)/i.test(path) && 
+    !/(node_modules|dist|build)/.test(path);
 
-    const headers = {
-        Accept: "application/vnd.github.v3+json",
-        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`
+const isTestFile = (path) => 
+    /(test|spec|__tests__)/i.test(path) && 
+    /\.(js|jsx|ts|tsx)$/.test(path);
+
+const isCIFile = (path) => 
+    /(\.github|\.gitlab|\.circleci|\.travis|azure-pipelines|bitbucket-pipelines)/i.test(path);
+
+// Enhanced file fetcher with better error handling
+async function fetchRepoFiles(repoUrl) {
+    try {
+        const [owner, repo] = repoUrl.split("github.com/")[1].split("/");
+        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`;
+
+        const headers = {
+            Accept: "application/vnd.github.v3+json",
+            Authorization: `Bearer ${process.env.GITHUB_TOKEN}`
+        };
+
+        const treeRes = await fetch(apiUrl, { headers });
+        if (!treeRes.ok) throw new Error(`Failed to fetch repo: ${treeRes.status}`);
+        const data = await treeRes.json();
+
+        const allFiles = data.tree.filter(file =>
+            file.type === "blob" &&
+            /\.(js|jsx|ts|tsx|json|yml|yaml|md|txt|sh|env|gitignore)$/.test(file.path) &&
+            !/(node_modules|dist|build|\.git|public\/assets)/.test(file.path)
+        );
+
+        const priorityPatterns = [
+            // Config files
+            'package.json', 'vite.config', 'webpack.config', 'tailwind.config',
+            'jest.config', '.eslintrc', '.prettierrc', 'tsconfig.json',
+            'dockerfile', '.github/', '.gitlab-ci.yml', '.env',
+            
+            // Core application files
+            'src/main', 'src/index', 'src/App', 
+            'src/components/', 'src/pages/', 'src/routes/', 
+            'src/hooks/', 'src/store/', 'src/context/', 
+            'src/services/', 'src/utils/', 'src/models/',
+            
+            // Test files
+            '__tests__/', '.test.', '.spec.'
+        ];
+
+        const sortedFiles = allFiles.sort((a, b) => {
+            const aIndex = priorityPatterns.findIndex(p => a.path.includes(p));
+            const bIndex = priorityPatterns.findIndex(p => b.path.includes(p));
+            return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+        });
+
+        const files = {};
+        for (const file of sortedFiles.slice(0, 50)) { // Limit to top 50 files for practicality
+            const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/${file.path}`;
+            try {
+                const rawRes = await fetch(rawUrl, { headers });
+                if (rawRes.ok) {
+                    const content = await rawRes.text();
+                    if (content.length < 15000) { // Larger limit for config files
+                        files[file.path] = content;
+                    }
+                }
+            } catch (err) {
+                console.warn(`Failed to fetch: ${file.path}`);
+            }
+        }
+
+        return files;
+    } catch (error) {
+        console.error('Error fetching repo files:', error);
+        throw error;
+    }
+}
+
+// Enhanced project analyzer
+function analyzeProject(files) {
+    const analysis = {
+        metrics: {
+            totalFiles: Object.keys(files).length,
+            linesOfCode: 0,
+            components: 0,
+            apiEndpoints: 0,
+            testFiles: 0,
+            technologies: new Set(),
+            architectureIndicators: {
+                hasConfig: false,
+                hasUtils: false,
+                hasServices: false,
+                hasLayers: false,
+                hasHooks: false
+            }
+        },
+        qualityIndicators: {
+            errorHandling: 0,
+            documentation: {
+                hasReadme: false,
+                hasComments: 0,
+                hasJsdoc: 0
+            },
+            complexity: {
+                highComplexFiles: 0,
+                avgComplexity: 0,
+                complexFunctions: []
+            },
+            patterns: new Set(),
+            imports: {
+                internal: 0,
+                external: 0,
+                deepExternal: 0
+            }
+        },
+        testCoverage: {
+            testFiles: 0,
+            testTypes: new Set(),
+            coverageFiles: 0,
+            testTools: new Set()
+        },
+        professionalIndicators: {
+            hasCI: false,
+            hasLinting: false,
+            hasFormatting: false,
+            hasHusky: false,
+            hasCommitLinting: false,
+            hasDocker: false
+        },
+        securityIndicators: {
+            hasEnvExample: false,
+            hasGitignore: false,
+            hasLockfile: false,
+            sensitiveData: 0
+        }
     };
 
-    const treeRes = await fetch(apiUrl, { headers });
-    if (!treeRes.ok) throw new Error(`Failed to fetch repo: ${treeRes.status}`);
-    const data = await treeRes.json();
-
-    const allFiles = data.tree.filter(file =>
-        file.type === "blob" &&
-        /\.(js|jsx|ts|tsx|json)$/.test(file.path) &&
-        !/(node_modules|dist|build|\.git|public|assets)/.test(file.path)
-    );
-
-    const priorityPatterns = [
-        'package.json', 'src/main', 'src/index', 'src/App',
-        'src/components/', 'src/pages/', 'src/hooks/', 'server.js', 'app.js'
-    ];
-
-    const sortedFiles = allFiles.sort((a, b) => {
-        const aIndex = priorityPatterns.findIndex(p => a.path.includes(p));
-        const bIndex = priorityPatterns.findIndex(p => b.path.includes(p));
-        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-    }).slice(0, 25);
-
-    const files = {};
-    for (const file of sortedFiles) {
-        const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/${file.path}`;
-        try {
-            const rawRes = await fetch(rawUrl, { headers });
-            if (rawRes.ok) {
-                const content = await rawRes.text();
-                if (content.length < 8000) {
-                    files[file.path] = content;
-                }
+    // First pass for config files and documentation
+    for (const [path, content] of Object.entries(files)) {
+        if (path.toLowerCase().includes('readme')) {
+            analysis.qualityIndicators.documentation.hasReadme = true;
+        }
+        
+        if (isConfigFile(path)) {
+            analysis.metrics.architectureIndicators.hasConfig = true;
+            
+            if (path.includes('eslint') || path.includes('prettier')) {
+                analysis.professionalIndicators.hasLinting = true;
             }
-        } catch (err) {
-            console.warn(`Failed to fetch: ${file.path}`);
+            
+            if (path.includes('docker')) {
+                analysis.professionalIndicators.hasDocker = true;
+            }
+        }
+        
+        if (path.includes('.env.example')) {
+            analysis.securityIndicators.hasEnvExample = true;
+        }
+        
+        if (path.includes('.gitignore')) {
+            analysis.securityIndicators.hasGitignore = true;
         }
     }
 
-    return files;
-}
-
-function analyzeProject(files) {
-    const stats = {
-        totalFiles: Object.keys(files).length,
-        components: 0,
-        apiEndpoints: 0,
-        functions: 0,
-        technologies: new Set(),
-        hasTests: false,
-        hasTypeScript: false,
-        totalLines: 0
-    };
-
-    const detectedLibs = new Set();
-
+    // Second pass for code analysis
+    let totalComplexity = 0;
+    let analyzedFiles = 0;
+    
     for (const [path, content] of Object.entries(files)) {
-        if (!content) continue;
-
-        stats.totalLines += content.split('\n').length;
-
-        // Extract imports
-        const importPatterns = [
-            /import\s+(?:[^'"]*)\s+from\s+['"]([^'"]+)['"]/g,
-            /import\s+['"]([^'"]+)['"]/g,
-            /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g
+        if (!content || !/\.(js|jsx|ts|tsx)$/.test(path)) continue;
+        
+        analysis.metrics.linesOfCode += content.split('\n').length;
+        
+        // Complexity analysis
+        try {
+            const complex = complexity(content);
+            totalComplexity += complex;
+            analyzedFiles++;
+            
+            if (complex > 15) {
+                analysis.qualityIndicators.complexity.highComplexFiles++;
+                analysis.qualityIndicators.complexity.complexFunctions.push({
+                    file: path,
+                    complexity: complex
+                });
+            }
+        } catch (e) {
+            console.warn(`Complexity analysis failed for ${path}`);
+        }
+        
+        // Documentation analysis
+        const commentLines = content.split('\n').filter(line => 
+            line.trim().startsWith('//') || line.trim().startsWith('/*')
+        ).length;
+        
+        analysis.qualityIndicators.documentation.hasComments += commentLines;
+        analysis.qualityIndicators.documentation.hasJsdoc += (content.match(/\/\*\*.*?\*\//gs) || []).length;
+        
+        // Component detection
+        const componentPatterns = [
+            /(?:function|const|class)\s+([A-Z]\w*)/g,
+            /export\s+(?:default\s+)?(?:function\s+)?([A-Z]\w*)/g
         ];
-
-        importPatterns.forEach(pattern => {
+        
+        componentPatterns.forEach(pattern => {
             let match;
             while ((match = pattern.exec(content))) {
-                const lib = match[1];
-                if (!lib.startsWith('.') && !lib.startsWith('/')) {
-                    const pkgName = lib.startsWith('@') 
-                        ? lib.split('/').slice(0, 2).join('/')
-                        : lib.split('/')[0];
-                    
-                    if (pkgName && !pkgName.match(/^(src|components|pages|utils|hooks)/)) {
-                        detectedLibs.add(pkgName);
-                    }
+                if (content.includes('return') && content.includes('<' + match[1])) {
+                    analysis.metrics.components++;
                 }
             }
         });
-
-        if (path.includes('test') || path.includes('spec')) stats.hasTests = true;
-        if (path.endsWith('.ts') || path.endsWith('.tsx')) stats.hasTypeScript = true;
-
-        const componentMatches = content.match(/(?:function|const|class)\s+[A-Z]\w*|export\s+(?:default\s+)?(?:function\s+)?[A-Z]\w*/g);
-        if (componentMatches && content.includes('<')) {
-            stats.components += componentMatches.length;
+        
+        // API endpoint detection
+        const apiPatterns = [
+            /\.(get|post|put|delete|patch)\s*\(/g,
+            /router\.(get|post|put|delete|patch)\s*\(/g
+        ];
+        
+        apiPatterns.forEach(pattern => {
+            analysis.metrics.apiEndpoints += (content.match(pattern) || []).length;
+        });
+        
+        // Test file analysis
+        if (isTestFile(path)) {
+            analysis.testCoverage.testFiles++;
+            
+            if (path.includes('__tests__')) {
+                analysis.testCoverage.testTypes.add('unit');
+            } else if (path.includes('integration')) {
+                analysis.testCoverage.testTypes.add('integration');
+            } else if (path.includes('e2e')) {
+                analysis.testCoverage.testTypes.add('e2e');
+            }
+            
+            if (path.includes('jest')) {
+                analysis.testCoverage.testTools.add('jest');
+            } else if (path.includes('mocha')) {
+                analysis.testCoverage.testTools.add('mocha');
+            } else if (path.includes('cypress')) {
+                analysis.testCoverage.testTools.add('cypress');
+            }
         }
-
-        const apiMatches = content.match(/\.(get|post|put|delete|patch)\s*\(/g);
-        if (apiMatches) stats.apiEndpoints += apiMatches.length;
-
-        const functionMatches = content.match(/(?:function\s+\w+|const\s+\w+\s*=\s*\(?\s*\)?\s*=>)/g);
-        if (functionMatches) stats.functions += functionMatches.length;
+        
+        // Architecture indicators
+        if (path.includes('utils/') || path.includes('helpers/')) {
+            analysis.metrics.architectureIndicators.hasUtils = true;
+        }
+        
+        if (path.includes('services/') || path.includes('api/')) {
+            analysis.metrics.architectureIndicators.hasServices = true;
+        }
+        
+        if (path.includes('hooks/') || path.includes('hooks.')) {
+            analysis.metrics.architectureIndicators.hasHooks = true;
+        }
+        
+        // Error handling detection
+        analysis.qualityIndicators.errorHandling += (content.match(/try\s*\{|catch\s*\(|\.catch\s*\(/g) || []).length;
+        
+        // Pattern detection
+        if (content.includes('useState') || content.includes('useEffect')) {
+            analysis.qualityIndicators.patterns.add('react-hooks');
+        }
+        
+        if (content.includes('redux') || content.includes('useSelector')) {
+            analysis.qualityIndicators.patterns.add('redux');
+        }
+        
+        if (content.includes('context') && content.includes('Provider')) {
+            analysis.qualityIndicators.patterns.add('context-api');
+        }
+        
+        // Import analysis
+        const importLines = content.split('\n').filter(line => line.includes('import ') || line.includes('require('));
+        
+        importLines.forEach(line => {
+            if (line.includes('./') || line.includes('../')) {
+                analysis.qualityIndicators.imports.internal++;
+            } else {
+                analysis.qualityIndicators.imports.external++;
+                
+                // Check for deep imports
+                if (line.split('/').length > 2) {
+                    analysis.qualityIndicators.imports.deepExternal++;
+                }
+            }
+        });
     }
-
+    
+    // Calculate average complexity
+    if (analyzedFiles > 0) {
+        analysis.qualityIndicators.complexity.avgComplexity = 
+            Math.round((totalComplexity / analyzedFiles) * 10) / 10;
+    }
+    
+    // Package.json analysis
     if (files['package.json']) {
         try {
             const pkg = JSON.parse(files['package.json']);
-            Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).forEach(dep => {
-                if (!dep.match(/^(eslint|@types|@vitejs|webpack|babel)/)) {
-                    detectedLibs.add(dep);
-                }
+            
+            // Check for technologies
+            const allDeps = {...pkg.dependencies, ...pkg.devDependencies};
+            Object.keys(allDeps).forEach(dep => {
+                const normalized = normalizeTech(dep);
+                if (normalized) analysis.metrics.technologies.add(normalized);
             });
+            
+            // Check for professional practices
+            if (pkg.scripts) {
+                if (pkg.scripts.test) analysis.testCoverage.testTools.add('npm-test');
+                if (pkg.scripts.lint) analysis.professionalIndicators.hasLinting = true;
+                if (pkg.scripts.format) analysis.professionalIndicators.hasFormatting = true;
+                if (pkg.scripts.prepare || pkg.scripts.prepush) {
+                    analysis.professionalIndicators.hasHusky = true;
+                }
+            }
+            
+            if (pkg.husky) {
+                analysis.professionalIndicators.hasHusky = true;
+                if (pkg.husky.hooks && pkg.husky.hooks['commit-msg']) {
+                    analysis.professionalIndicators.hasCommitLinting = true;
+                }
+            }
+            
+            if (allDeps['husky']) analysis.professionalIndicators.hasHusky = true;
+            if (allDeps['commitlint']) analysis.professionalIndicators.hasCommitLinting = true;
+            
+            // Check for lockfile
+            if (files['package-lock.json'] || files['yarn.lock']) {
+                analysis.securityIndicators.hasLockfile = true;
+            }
         } catch (e) {
-            console.warn('Invalid package.json');
+            console.warn('Failed to parse package.json');
         }
     }
-
-    detectedLibs.forEach(lib => stats.technologies.add(lib));
-    return stats;
+    
+    // CI/CD detection
+    for (const path in files) {
+        if (isCIFile(path)) {
+            analysis.professionalIndicators.hasCI = true;
+            break;
+        }
+    }
+    
+    return analysis;
 }
 
-function calculateScore(stats) {
-    let score = 2;
-    
-    if (stats.totalFiles > 15) score += 2;
-    else if (stats.totalFiles > 8) score += 1;
-    
-    if (stats.components > 8) score += 2;
-    else if (stats.components > 4) score += 1;
-    
-    if (stats.apiEndpoints > 3) score += 1.5;
-    else if (stats.apiEndpoints > 0) score += 1;
-    
-    if (stats.technologies.size > 5) score += 1.5;
-    else if (stats.technologies.size > 3) score += 1;
-    
-    if (stats.hasTests) score += 1;
-    if (stats.hasTypeScript) score += 1;
-    if (stats.totalLines > 1500) score += 0.5;
-    
-    return Math.min(Math.round(score * 10) / 10, 10);
-}
-
-function createPrompt(stats, score) {
-    return `Analyze this GitHub repository and return JSON:
-
-{
-  "score": ${score},
-  "rationale": ["reason1", "reason2"],
-  "technologies": ${JSON.stringify(Array.from(stats.technologies))},
-  "strengths": ["strength1", "strength2"],
-  "weaknesses": ["weakness1", "weakness2"],
-  "improvements": ["improvement1", "improvement2"],
-  "hiringPotential": {
-    "level": "Junior/Mid/Senior/Entry",
-    "details": "explanation",
-    "watchAreas": ["area1", "area2"]
-  },
-  "conclusion": "summary"
-}
-
-Metrics: ${stats.totalFiles} files, ${stats.components} components, ${stats.apiEndpoints} APIs, ${Array.from(stats.technologies).join(', ')}`;
-}
-
-function createFallbackAnalysis(stats, score) {
-    return {
-        score,
-        rationale: [
-            `Analyzed ${stats.totalFiles} files with ${stats.totalLines} lines`,
-            `Found ${stats.components} components and ${stats.apiEndpoints} API endpoints`
-        ],
-        technologies: Array.from(stats.technologies),
-        strengths: [
-            stats.hasTypeScript ? "Uses TypeScript" : "Good JavaScript structure",
-            stats.components > 3 ? "Well-organized components" : "Basic project structure"
-        ],
-        weaknesses: [
-            !stats.hasTests ? "No tests detected" : "Limited test coverage",
-            stats.totalFiles < 10 ? "Small project scope" : "Could improve documentation"
-        ],
-        improvements: [
-            "Add comprehensive tests",
-            "Improve documentation",
-            "Consider TypeScript if not used"
-        ],
-        hiringPotential: {
-            level: score >= 7 ? "Senior" : score >= 5 ? "Mid" : score >= 3 ? "Junior" : "Entry",
-            details: `Shows ${score >= 6 ? 'strong' : score >= 4 ? 'decent' : 'basic'} development skills with ${Array.from(stats.technologies).slice(0, 3).join(', ')}.`,
-            watchAreas: [
-                !stats.hasTests ? "Testing practices" : "Test coverage",
-                "Code documentation",
-                "Project complexity"
-            ]
+// Enhanced evaluation with multiple dimensions
+function evaluateCandidate(analysis) {
+    const evaluation = {
+        technicalAssessment: {
+            strengths: [],
+            concerns: [],
+            recommendations: []
         },
-        conclusion: `${score}/10 - ${score >= 7 ? 'Excellent' : score >= 5 ? 'Good' : score >= 3 ? 'Decent' : 'Basic'} profile with growth potential.`
+        experienceLevel: {
+            likelyLevel: 'Junior',
+            confidence: 0.7,
+            growthAreas: []
+        },
+        teamFit: {
+            likelyRoles: [],
+            collaborationSignals: []
+        },
+        hiringRecommendation: {
+            recommendation: 'Neutral',
+            rationale: ''
+        }
     };
+    
+    // Technical strengths
+    if (analysis.metrics.technologies.size > 5) {
+        evaluation.technicalAssessment.strengths.push(
+            `Diverse technology exposure (${analysis.metrics.technologies.size} major technologies)`
+        );
+    }
+    
+    if (analysis.testCoverage.testFiles > 3) {
+        evaluation.technicalAssessment.strengths.push(
+            `Good test coverage (${analysis.testCoverage.testFiles} test files)`
+        );
+    }
+    
+    if (analysis.qualityIndicators.errorHandling > 10) {
+        evaluation.technicalAssessment.strengths.push(
+            `Strong error handling (${analysis.qualityIndicators.errorHandling} try/catch blocks)`
+        );
+    }
+    
+    // Technical concerns
+    if (analysis.qualityIndicators.complexity.highComplexFiles > 3) {
+        evaluation.technicalAssessment.concerns.push(
+            `${analysis.qualityIndicators.complexity.highComplexFiles} highly complex files (complexity > 15)`
+        );
+    }
+    
+    if (!analysis.qualityIndicators.documentation.hasReadme) {
+        evaluation.technicalAssessment.concerns.push('Missing README documentation');
+    }
+    
+    if (analysis.qualityIndicators.imports.deepExternal > 5) {
+        evaluation.technicalAssessment.concerns.push(
+            `${analysis.qualityIndicators.imports.deepExternal} deep external imports (potential dependency issues)`
+        );
+    }
+    
+    // Experience level assessment
+    let levelScore = 0;
+    
+    if (analysis.metrics.components > 10) levelScore += 1;
+    if (analysis.metrics.apiEndpoints > 5) levelScore += 1;
+    if (analysis.testCoverage.testTypes.size > 1) levelScore += 1;
+    if (analysis.professionalIndicators.hasCI) levelScore += 1;
+    if (analysis.qualityIndicators.patterns.size > 2) levelScore += 1;
+    
+    if (levelScore >= 4) {
+        evaluation.experienceLevel.likelyLevel = 'Senior';
+        evaluation.experienceLevel.confidence = 0.8;
+    } else if (levelScore >= 2) {
+        evaluation.experienceLevel.likelyLevel = 'Mid';
+        evaluation.experienceLevel.confidence = 0.7;
+    } else {
+        evaluation.experienceLevel.likelyLevel = 'Junior';
+        evaluation.experienceLevel.confidence = 0.6;
+    }
+    
+    // Team fit assessment
+    const techs = Array.from(analysis.metrics.technologies);
+    
+    if (techs.some(t => ['react', 'vue', 'angular'].includes(t))) {
+        evaluation.teamFit.likelyRoles.push('Frontend');
+    }
+    
+    if (techs.some(t => ['express', 'nestjs', 'spring'].includes(t))) {
+        evaluation.teamFit.likelyRoles.push('Backend');
+    }
+    
+    if (evaluation.teamFit.likelyRoles.length > 1) {
+        evaluation.teamFit.likelyRoles = ['Full-stack'];
+    }
+    
+    // Collaboration signals
+    if (analysis.professionalIndicators.hasLinting) {
+        evaluation.teamFit.collaborationSignals.push('Uses linting (consistent code style)');
+    }
+    
+    if (analysis.professionalIndicators.hasHusky) {
+        evaluation.teamFit.collaborationSignals.push('Uses git hooks (professional workflow)');
+    }
+    
+    if (analysis.professionalIndicators.hasCI) {
+        evaluation.teamFit.collaborationSignals.push('CI/CD configured (team-ready)');
+    }
+    
+    // Hiring recommendation
+    const recommendationScore = 
+        (evaluation.technicalAssessment.strengths.length * 2) - 
+        (evaluation.technicalAssessment.concerns.length * 1.5) +
+        (evaluation.experienceLevel.likelyLevel === 'Senior' ? 3 : 
+         evaluation.experienceLevel.likelyLevel === 'Mid' ? 2 : 1);
+    
+    if (recommendationScore >= 5) {
+        evaluation.hiringRecommendation.recommendation = 'Strong Yes';
+        evaluation.hiringRecommendation.rationale = 'Demonstrates strong technical skills and professional practices';
+    } else if (recommendationScore >= 3) {
+        evaluation.hiringRecommendation.recommendation = 'Yes';
+        evaluation.hiringRecommendation.rationale = 'Shows good potential with some areas for improvement';
+    } else if (recommendationScore >= 1) {
+        evaluation.hiringRecommendation.recommendation = 'Neutral';
+        evaluation.hiringRecommendation.rationale = 'Mixed signals, would benefit from interview evaluation';
+    } else {
+        evaluation.hiringRecommendation.recommendation = 'No';
+        evaluation.hiringRecommendation.rationale = 'Significant gaps in key areas';
+    }
+    
+    return evaluation;
 }
 
+// API endpoint with enhanced analysis
 app.post("/api/analyze", async (req, res) => {
     try {
         const { repositories } = req.body;
@@ -225,8 +507,7 @@ app.post("/api/analyze", async (req, res) => {
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': '*'
+            'Connection': 'keep-alive'
         });
 
         const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -254,35 +535,57 @@ app.post("/api/analyze", async (req, res) => {
         }
 
         send({ stage: 'analyzing' });
-        const stats = analyzeProject(allFiles);
-        const score = calculateScore(stats);
+        const analysis = analyzeProject(allFiles);
+        
+        send({ stage: 'evaluating' });
+        const evaluation = evaluateCandidate(analysis);
 
         send({ stage: 'ai-processing' });
 
         let aiFeedback;
         if (process.env.OPENAI_API_KEY) {
             try {
+                const prompt = `Analyze this codebase evaluation and provide detailed feedback in JSON format:
+                
+                ${JSON.stringify({ analysis, evaluation }, null, 2)}
+                
+                Return JSON with these fields:
+                {
+                    "summary": "overall summary",
+                    "technicalStrengths": [],
+                    "technicalWeaknesses": [],
+                    "professionalPractices": [],
+                    "recommendedRoles": [],
+                    "interviewQuestions": [],
+                    "finalAssessment": ""
+                }`;
+                
                 const chat = await openai.chat.completions.create({
-                    model: "gpt-4o-mini",
+                    model: "gpt-4",
                     messages: [
-                        { role: "system", content: "You are a senior developer. Return only valid JSON." },
-                        { role: "user", content: createPrompt(stats, score) }
+                        { role: "system", content: "You are a senior engineering manager. Provide detailed but concise feedback." },
+                        { role: "user", content: prompt }
                     ],
-                    temperature: 0.2,
-                    max_tokens: 800
+                    temperature: 0.3,
+                    max_tokens: 1000,
+                    response_format: { type: "json_object" }
                 });
+                
                 aiFeedback = JSON.parse(chat.choices[0].message.content);
             } catch (err) {
-                aiFeedback = createFallbackAnalysis(stats, score);
+                console.error('AI analysis failed:', err);
+                aiFeedback = { error: "AI analysis failed", details: err.message };
             }
-        } else {
-            aiFeedback = createFallbackAnalysis(stats, score);
         }
 
         send({
             stage: 'complete',
             success: true,
-            result: { aiFeedback, metrics: { ...stats, technologies: Array.from(stats.technologies), score } }
+            result: { 
+                analysis,
+                evaluation,
+                aiFeedback: aiFeedback || { note: "OpenAI integration not configured" }
+            }
         });
 
         res.end();
