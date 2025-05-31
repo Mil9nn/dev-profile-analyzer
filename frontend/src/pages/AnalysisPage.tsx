@@ -4,14 +4,11 @@ import Navbar from '../components/Navbar'
 import { AnalysisForm } from '../components/AnalysisForm'
 import { ResultsDisplay } from '../components/ResultsDisplay'
 import { EmptyState } from '../components/states/EmptyState'
-import { AnalysisProvider, useAnalysisContext } from '../contexts/AnalysisContext'
-import { type ProgressUpdate } from '../hooks/useAnalysis'
+import { useAnalysis } from '../hooks/useAnalysis'
 
-interface ProgressDisplayProps {
-  progress: ProgressUpdate | null
-}
-
-function ProgressDisplay({ progress }: ProgressDisplayProps) {
+function ProgressDisplay() {
+  const { progress } = useAnalysis()
+  
   if (!progress) return null
 
   const getIcon = () => {
@@ -63,8 +60,8 @@ function ProgressDisplay({ progress }: ProgressDisplayProps) {
   )
 }
 
-function AnalysisPageContent() {
-  const { loading, result, error, progress } = useAnalysisContext()
+export default function AnalysisPage() {
+  const { loading, result, error, analyzeProfile } = useAnalysis()
   
   return (
     <div className="min-h-screen bg-zinc-900 text-white">
@@ -73,7 +70,7 @@ function AnalysisPageContent() {
         <div className="grid lg:grid-cols-2 gap-8">
           <div>
             <h1 className="text-3xl font-bold mb-3">Profile Analysis</h1>
-            <AnalysisForm />
+            <AnalysisForm onSubmit={analyzeProfile} loading={loading} />
           </div>
           
           <div className="flex items-center justify-center">
@@ -82,7 +79,7 @@ function AnalysisPageContent() {
                 <p className="text-red-400">{error}</p>
               </div>
             ) : loading ? (
-              <ProgressDisplay progress={progress} />
+              <ProgressDisplay />
             ) : result ? (
               <ResultsDisplay result={result} />
             ) : (
@@ -92,13 +89,5 @@ function AnalysisPageContent() {
         </div>
       </div>
     </div>
-  )
-}
-
-export default function AnalysisPage() {
-  return (
-    <AnalysisProvider>
-      <AnalysisPageContent />
-    </AnalysisProvider>
   )
 }
