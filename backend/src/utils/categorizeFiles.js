@@ -29,8 +29,8 @@ export const categorizeFiles = (files) => {
     ];
 
     // Additional quality filters
-    const MIN_FILE_SIZE = 50; // Ignore tiny files (likely empty or minimal)
-    const MAX_FILE_SIZE = 1000000; // Ignore huge files (likely generated/binary)
+    const MIN_FILE_SIZE = 50;
+    const MAX_FILE_SIZE = 1000000;
 
     const isIgnoredPath = (filePath) => {
         const pathLower = filePath.toLowerCase();
@@ -65,19 +65,6 @@ export const categorizeFiles = (files) => {
         // Path checks
         const hasValidPath = !isIgnoredPath(filePath) && !isIgnoredFile(fileName);
 
-        // Prefer source directories
-        const isInSourceDir = filePath.toLowerCase().includes('/src/') ||
-            filePath.toLowerCase().includes('/lib/') ||
-            filePath.toLowerCase().includes('/app/') ||
-            filePath.toLowerCase().includes('/components/') ||
-            filePath.toLowerCase().includes('/pages/') ||
-            filePath.toLowerCase().includes('/views/') ||
-            filePath.toLowerCase().includes('/controllers/') ||
-            filePath.toLowerCase().includes('/models/') ||
-            filePath.toLowerCase().includes('/services/') ||
-            filePath.toLowerCase().includes('/utils/') ||
-            filePath.toLowerCase().includes('/helpers/');
-
         return hasValidExtension && hasValidSize && hasValidPath;
     };
 
@@ -111,7 +98,7 @@ export const categorizeFiles = (files) => {
             let scoreB = 0;
 
             // Size factor (larger files likely have more logic)
-            scoreA += Math.min(a.size / 1000, 50); // Cap at 50 points
+            scoreA += Math.min(a.size / 1000, 50);
             scoreB += Math.min(b.size / 1000, 50);
 
             // Source directory bonus
@@ -135,7 +122,7 @@ export const categorizeFiles = (files) => {
             if (aPath.includes('index.') || aPath.includes('main.') || aPath.includes('app.')) scoreA += 10;
             if (bPath.includes('index.') || bPath.includes('main.') || bPath.includes('app.')) scoreB += 10;
 
-            return scoreB - scoreA; // Higher score first
+            return scoreB - scoreA;
         });
     };
 
@@ -143,7 +130,6 @@ export const categorizeFiles = (files) => {
     const prioritizedFrontend = prioritizeFiles(frontend);
     const prioritizedBackend = prioritizeFiles(backend);
     const prioritizedConfig = config.sort((a, b) => {
-        // Prioritize main config files
         const aName = a.path.toLowerCase();
         const bName = b.path.toLowerCase();
 
@@ -179,7 +165,7 @@ export const categorizeFiles = (files) => {
     return result;
 };
 
-// Helper function to validate file quality
+// Helper function to validate file selection
 export const validateFileSelection = (categorizeFiles) => {
     const { frontend, backend, config } = categorizeFiles;
 
