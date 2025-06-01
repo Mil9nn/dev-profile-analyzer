@@ -1,63 +1,15 @@
-// frontend/src/pages/AnalysisPage.tsx
-import Navbar from '../components/Navbar'
-import { AnalysisForm } from '../components/AnalysisForm'
-import { ProgressDisplay } from '../components/ProgressDisplay'
-import { ResultsDisplay } from '../components/ResultsDisplay'
-import { EmptyState } from '../components/states/EmptyState'
-import { useAnalysis } from '../hooks/useAnalysis'
-
-export default function AnalysisPage() {
-  const { loading, result, error, progress, analyzeProfile } = useAnalysis()
-  
-  const renderRightPanel = () => {
-    if (error) {
-      return (
-        <div className="text-center p-6 bg-red-500/10 rounded-lg border border-red-500/20 max-w-md w-full">
-          <div className="text-red-400 font-medium mb-2">Analysis Failed</div>
-          <p className="text-red-300 text-sm">{error}</p>
-        </div>
-      )
-    }
-    
-    if (loading && progress) {
-      return <ProgressDisplay progress={progress} />
-    }
-    
-    if (result) {
-      return <ResultsDisplay result={result} />
-    }
-    
-    return <EmptyState />
-  }
-  
-  return (
-    <div className="min-h-screen bg-zinc-900 text-white">
-      <Navbar />
-      <div className="container mx-auto p-6">
-        <div className="grid lg:grid-cols-2 gap-8 items-start">
-          <div>
-            <h1 className="text-3xl font-bold mb-6">Profile Analysis</h1>
-            <AnalysisForm onSubmit={analyzeProfile} loading={loading} />
-          </div>
-          
-          <div className="flex items-center justify-center min-h-[400px]">
-            {renderRightPanel()}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 const AnalysisPage = () => {
   return (
     <div>
-      {/* A Header section with the logo on the left and signup an Login on the right (only UI)*/}
+      {/* A header with a logo on the left and a signup and login button on the right (only UI)
 
-      {/* Main section with a Form taking github profile, linkeding profile (optional) and only 03 git repositories and atleast 1 required */}
+      A main section with a form on the left and analysis results on the right */}
 
-      {/* Form should be on the left and Analysis should happen on the right */}
+      {/* after submit we can even hide the from from the ui and on analysis provide a backward arrow to get back to form */}
 
+      {/* when analysis starts: analysis results on the left and web page for user displayed on the right */}
+      {/* {the web page will be like a users resume highlighting his works and skills or techstack} */}
     </div>
   )
 }
