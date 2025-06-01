@@ -13,10 +13,10 @@ interface AnalysisContextType {
 const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined)
 
 export function AnalysisProvider({ children }: { children: ReactNode }) {
-  const analysisHook = useAnalysis()
+  const analysis = useAnalysis()
   
   return (
-    <AnalysisContext.Provider value={analysisHook}>
+    <AnalysisContext.Provider value={analysis}>
       {children}
     </AnalysisContext.Provider>
   )
@@ -24,8 +24,8 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
 export function useAnalysisContext() {
   const context = useContext(AnalysisContext)
-  if (context === undefined) {
-    throw new Error('useAnalysisContext must be used within an AnalysisProvider')
+  if (!context) {
+    throw new Error('useAnalysisContext must be used within AnalysisProvider')
   }
   return context
 }

@@ -31,20 +31,23 @@ export type AnalysisResult = {
   }
 }
 
-export type Progress = {
+// Sync with backend progress structure
+export type ProgressUpdate = {
   stage: 'fetching' | 'fetched' | 'analyzing' | 'ai-processing' | 'complete' | 'error'
   repo?: string
   current?: number
   total?: number
   fileCount?: number
   error?: string
+  success?: boolean
+  result?: AnalysisResult
 }
 
 export function useAnalysis() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [error, setError] = useState('')
-  const [progress, setProgress] = useState<Progress | null>(null)
+  const [progress, setProgress] = useState<ProgressUpdate | null>(null)
 
   const analyzeProfile = async (data: FormData) => {
     setLoading(true)
@@ -60,11 +63,11 @@ export function useAnalysis() {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`Server error: ${response.status}`)
       }
 
       const reader = response.body?.getReader()
-      if (!reader) throw new Error('No response reader')
+      if (!reader) throw new Error('No response stream')
 
       const decoder = new TextDecoder()
       let buffer = ''
@@ -81,11 +84,11 @@ export function useAnalysis() {
           if (!line.trim() || !line.startsWith('data: ')) continue
           
           try {
-            const update = JSON.parse(line.slice(6))
+            const update: ProgressUpdate = JSON.parse(line.slice(6))
             setProgress(update)
             
             if (update.stage === 'complete') {
-              if (update.success) {
+              if (update.success && update.result) {
                 setResult(update.result)
               } else {
                 setError(update.error || 'Analysis failed')
@@ -93,23 +96,18 @@ export function useAnalysis() {
               setLoading(false)
               return
             } else if (update.stage === 'error') {
-              setError(update.error || 'Analysis failed')
+              setError(update.error || 'Unknown error occurred')
               setLoading(false)
               return
             }
           } catch (parseErr) {
-            console.error('Parse error:', parseErr)
+            console.warn('Failed to parse progress update:', parseErr)
           }
         }
       }
 
-      if (loading) {
-        setError('Analysis incomplete')
-        setLoading(false)
-      }
-
     } catch (err: any) {
-      setError(err.message || 'Analysis failed')
+      setError(err.message || 'Connection failed')
       setLoading(false)
     }
   }
