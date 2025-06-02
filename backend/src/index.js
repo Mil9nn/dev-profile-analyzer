@@ -183,7 +183,7 @@ Provide analysis in this exact JSON format:
           content: prompt
         }
       ],
-      max_tokens: 2000,
+      max_tokens: 1000,
       temperature: 0.2 ,
     }, {
       headers: {
@@ -264,8 +264,6 @@ app.post('/api/analyze', async (req, res) => {
       });
     }
 
-    console.log(`Starting enhanced code analysis for: ${username}`);
-
     // Emit initial progress
     if (socketId) {
       io.to(socketId).emit('progress', {
@@ -295,8 +293,6 @@ app.post('/api/analyze', async (req, res) => {
         progress: 100
       });
     }
-
-    console.log(`Enhanced code analysis completed for ${username} - Score: ${aiFeedback.score}/10`);
 
     const totalFrontendFiles = githubData.repositories.reduce((sum, repo) => sum + repo.codeAnalysis.frontend.length, 0);
     const totalBackendFiles = githubData.repositories.reduce((sum, repo) => sum + repo.codeAnalysis.backend.length, 0);

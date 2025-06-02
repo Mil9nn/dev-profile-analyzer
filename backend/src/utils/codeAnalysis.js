@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { techStackMap } from '../techStackMap.js';
 
 // Helper function to fetch file content
 export const fetchFileContent = async (username, repo, filePath, githubConfig) => {
@@ -26,7 +27,7 @@ export const analyzeCodeComplexity = (content, filePath) => {
   const comments = (content.match(/\/\/|\/\*|\*\/|#|<!--/g) || []).length;
   const complexPatterns = (content.match(/if\s*\(|for\s*\(|while\s*\(|switch\s*\(|try\s*{|catch\s*\(/g) || []).length;
 
-  return {
+  const result = {
     linesOfCode: lines,
     functionCount: functions,
     importCount: imports,
@@ -34,39 +35,44 @@ export const analyzeCodeComplexity = (content, filePath) => {
     cyclomaticComplexity: complexPatterns,
     codeQualityScore: Math.min(10, (comments / lines * 10) + (functions > 0 ? 2 : 0) + (imports > 0 ? 1 : 0))
   };
+
+ return result; 
 };
 
-// Extract tech stack from config files
 export const extractTechStack = (content, filePath) => {
-  const techStack = [];
+  const techStack = new Set();
 
+  // Check for package.json (Node.js / JS projects)
   if (filePath.includes('package.json')) {
     try {
       const packageData = JSON.parse(content);
-      const deps = { ...packageData.dependencies, ...packageData.devDependencies };
-      Object.keys(deps).forEach(dep => {
-        if (dep.includes('react')) techStack.push('React');
-        if (dep.includes('vue')) techStack.push('Vue.js');
-        if (dep.includes('angular')) techStack.push('Angular');
-        if (dep.includes('express')) techStack.push('Express.js');
-        if (dep.includes('typescript')) techStack.push('TypeScript');
-        if (dep.includes('webpack')) techStack.push('Webpack');
-        if (dep.includes('tailwind')) techStack.push('Tailwind CSS');
-      });
+      const deps = {
+        ...packageData.dependencies,
+        ...packageData.devDependencies
+      };
+
+      for (const dep of Object.keys(deps || {})) {
+        for (const [tech, rules] of Object.entries(techStackMap)) {
+          if (rules.dependencies?.some(keyword => dep.toLowerCase().includes(keyword.toLowerCase()))) {
+            techStack.add(tech);
+          }
+        }
+      }
     } catch (e) {
-      console.warn('Could not parse package.json');
+      console.warn(`Could not parse package.json at ${filePath}`);
     }
   }
 
-  if (filePath.includes('requirements.txt') || filePath.includes('.py')) {
-    if (content.includes('django')) techStack.push('Django');
-    if (content.includes('flask')) techStack.push('Flask');
-    if (content.includes('fastapi')) techStack.push('FastAPI');
-    if (content.includes('pandas')) techStack.push('Pandas');
-    if (content.includes('numpy')) techStack.push('NumPy');
+  // Check for Python projects and general file keywords
+  if (filePath.includes('requirements.txt') || filePath.endsWith('.py')) {
+    for (const [tech, rules] of Object.entries(techStackMap)) {
+      if (rules.keywords?.some(keyword => content.toLowerCase().includes(keyword.toLowerCase()))) {
+        techStack.add(tech);
+      }
+    }
   }
 
-  return techStack;
+  return Array.from(techStack);
 };
 
 // Fetch repository file tree

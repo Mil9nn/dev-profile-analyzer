@@ -87,13 +87,10 @@ export const fetchGitHubCodeData = async (username, repos, progressCallback = nu
         const categorized = categorizeFiles(files);
 
         console.log(`🖼️ Frontend Files (${categorized.frontend.length}):`);
-        categorized.frontend.forEach(file => console.log(` - ${file.path}`));
 
         console.log(`🛠️ Backend Files (${categorized.backend.length}):`);
-        categorized.backend.forEach(file => console.log(` - ${file.path}`));
 
         console.log(`⚙️ Config Files (${categorized.config.length}):`);
-        categorized.config.forEach(file => console.log(` - ${file.path}`));
 
         // Fetch actual code content for priority files
         const codeAnalysis = {
