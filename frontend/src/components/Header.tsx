@@ -26,9 +26,9 @@ export function Header() {
           <div className="hidden md:flex items-center gap-4">
             <Link
               to="/login"
-              className="px-4 py-2 rounded-full text-sm hover:bg-purple-700 bg-purple-600 transition"
+              className="px-4 py-2 rounded-full text-sm font-semibold hover:bg-purple-700 bg-purple-600 transition"
             >
-              Login
+              Log In
             </Link>
             <Link
               to="/signup"
