@@ -13,7 +13,7 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: "http://localhost:5173",
     methods: ["GET", "POST"]
   }
 });
@@ -103,7 +103,9 @@ app.post('/api/analyze', async (req, res) => {
   try {
     // Emit progress updates
     const emitProgress = (step, progress, message) => {
-      io.to(socketId).emit('analysisProgress', { step, progress, message });
+      if (socketId) {
+        io.to(socketId).emit('analysisProgress', { step, progress, message });
+      }
     };
 
     emitProgress('fetching', 10, 'Fetching GitHub repositories...');
@@ -170,17 +172,26 @@ app.post('/api/analyze', async (req, res) => {
 
     emitProgress('complete', 100, 'Analysis complete!');
 
-    res.json({
+    const responseData = {
       success: true,
       data: {
         username,
         skillAnalysis,
         analysisId: analysis._id
       }
-    });
+    };
+
+    // FIXED: Emit analysisComplete event that frontend is waiting for
+    if (socketId) {
+      io.to(socketId).emit('analysisComplete', responseData);
+    }
+
+    res.json(responseData);
 
   } catch (error) {
-    io.to(socketId).emit('analysisError', { error: error.message });
+    if (socketId) {
+      io.to(socketId).emit('analysisError', { error: error.message });
+    }
     res.status(400).json({ success: false, error: error.message });
   }
 });

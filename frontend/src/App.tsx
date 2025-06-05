@@ -10,7 +10,7 @@ import ResultsDashboard from './components/ResultsDashboard';
 import { Github, Code, TrendingUp } from 'lucide-react';
 
 const App = () => {
-  const { socket, setSocket, updateProgress, setAnalysisResult, setError } = useAnalysisStore();
+  const { socket, setSocket, updateProgress, setAnalysisResult, setError, isAnalyzing, analysisResult } = useAnalysisStore();
 
   useEffect(() => {
     // Initialize socket connection
@@ -37,6 +37,19 @@ const App = () => {
     };
   }, []);
 
+  // Determine which component to show
+  const getCurrentView = () => {
+    if (analysisResult) {
+      return 'results';
+    } else if (isAnalyzing) {
+      return 'progress';
+    } else {
+      return 'form';
+    }
+  };
+
+  const currentView = getCurrentView();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <div className="container mx-auto px-4 py-8">
@@ -60,9 +73,41 @@ const App = () => {
         {/* Main Content */}
         <div className="max-w-6xl mx-auto">
           <AnimatePresence mode="wait">
-            <AnalysisForm />
-            <ProgressTracker />
-            <ResultsDashboard />
+            {currentView === 'form' && (
+              <motion.div
+                key="analysis-form"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <AnalysisForm />
+              </motion.div>
+            )}
+            
+            {currentView === 'progress' && (
+              <motion.div
+                key="progress-tracker"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <ProgressTracker />
+              </motion.div>
+            )}
+            
+            {currentView === 'results' && (
+              <motion.div
+                key="results-dashboard"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <ResultsDashboard />
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
       </div>

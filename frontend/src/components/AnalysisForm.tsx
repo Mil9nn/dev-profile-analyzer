@@ -11,12 +11,14 @@ const AnalysisForm = () => {
     isAnalyzing, 
     startAnalysis, 
     socket,
-    analysisResult 
+    analysisResult,
+    setAnalysisResult,
+    setError
   } = useAnalysisStore();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username.trim() || isAnalyzing) return;
+    if (!username.trim() || isAnalyzing || !socket) return;
 
     startAnalysis();
 
@@ -25,8 +27,15 @@ const AnalysisForm = () => {
         { username },
         { headers: { 'socket-id': socket.id } }
       );
+      
+      // FIXED: Handle the response directly as fallback
+      // The socket event should handle this, but this ensures it works
+      if (response.data.success) {
+        setAnalysisResult(response.data);
+      }
     } catch (error) {
       console.error('Analysis failed:', error);
+      setError(error.response?.data?.error || 'Analysis failed');
     }
   };
 
@@ -62,7 +71,7 @@ const AnalysisForm = () => {
 
           <motion.button
             type="submit"
-            disabled={!username.trim() || isAnalyzing}
+            disabled={!username.trim() || isAnalyzing || !socket}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-4 px-8 rounded-xl font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
