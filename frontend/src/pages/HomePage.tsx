@@ -1,4 +1,4 @@
-import { useAppStore } from '@/store/useAnalysisStore';
+import { useAnalysisStore } from '@/store/useAnalysisStore';
 import InputForm from '../components/InputForm';
 import { EmptyState } from '@/components/EmptyState';
 
@@ -9,7 +9,7 @@ const HomePage = () => {
     error, setError,
     progress, setProgress,
     isPrintMode, setIsPrintMode
-  } = useAppStore();
+  } = useAnalysisStore();
 
   const handleAnalyze = async (formData) => {
     try {

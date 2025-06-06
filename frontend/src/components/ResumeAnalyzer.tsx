@@ -6,13 +6,22 @@ import { useRef } from 'react';
 import html2canvas from 'html2canvas-pro';
 import jsPDF from 'jspdf';
 import InputForm from './InputForm.tsx';
-import { useAppStore } from '@/store/useAnalysisStore.ts';
 
 // Components
 const LoadingSpinner = ({ message }) => (
     <div className="flex flex-col items-center justify-center p-8">
         <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-4" />
         <p className="text-gray-600">{message}</p>
+    </div>
+);
+
+const ProgressBar = ({ progress, step, message }) => (
+    <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+        <div
+            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${progress}%` }}
+        />
+        <p className="text-sm text-gray-600 mt-2">{step}: {message}</p>
     </div>
 );
 
@@ -246,13 +255,11 @@ const ErrorMessage = ({ error, onRetry }) => (
 
 // Main App Component
 const ResumeAnalyzer = () => {
-    const {
-    resumeData, setResumeData,
-    loading, setLoading,
-    error, setError,
-    progress, setProgress,
-    isPrintMode, setIsPrintMode
-  } = useAppStore();
+    const [resumeData, setResumeData] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [progress, setProgress] = useState({ step: '', progress: 0, message: '' });
+    const [isPrintMode, setIsPrintMode] = useState(false);
 
     const resumeRef = useRef();
 
@@ -345,6 +352,21 @@ const ResumeAnalyzer = () => {
         <div>
             <div className="container mx-auto p-4">
                 {error && <ErrorMessage error={error} onRetry={handleRetry} />}
+
+                {loading && (
+                    <div className="max-w-2xl mx-auto  rounded-lg shadow-lg p-6 mb-6">
+                        <h2 className="text-xl font-semibold text-gray-800 mb-4">Analyzing Your Repositories</h2>
+                        <ProgressBar
+                            progress={progress.progress}
+                            step={progress.step}
+                            message={progress.message}
+                        />
+                    </div>
+                )}
+
+                {!resumeData && !loading && (
+                    <InputForm onSubmit={handleAnalyze} loading={loading} />
+                )}
 
                 {resumeData && (
                     <div className="max-w-4xl mx-auto">

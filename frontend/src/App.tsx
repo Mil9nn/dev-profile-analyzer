@@ -8,8 +8,7 @@ export default function App() {
   return (
     <Routes>
       <Route element={<MainLayout />}>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/analysis" element={<ResumeAnalyzer />} />
+        <Route path="/" element={<ResumeAnalyzer />} />
       </Route>
     </Routes>
   )
