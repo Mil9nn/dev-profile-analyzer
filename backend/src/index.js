@@ -5,7 +5,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import OpenAI from 'openai';
 import axios from 'axios';
-import mongoose from 'mongoose';
+import { connectDB } from './config/db.js';
+import { Resume } from './models/resume.model.js';
 
 dotenv.config();
 
@@ -23,20 +24,10 @@ app.use(cors());
 app.use(express.json());
 
 // Enhanced MongoDB Schema
-const ResumeSchema = new mongoose.Schema({
-  username: String,
-  linkedinUrl: String,
-  repositories: Array,
-  skillAnalysis: Object,
-  resumeData: Object,
-  overallScore: Number,
-  createdAt: { type: Date, default: Date.now }
-});
 
-const Resume = mongoose.model('Resume', ResumeSchema);
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/devresume');
+connectDB();
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -50,7 +41,7 @@ const fetchGitHubRepo = async (repoUrl) => {
     const urlParts = repoUrl.replace('https://github.com/', '').split('/');
     const owner = urlParts[0];
     const repo = urlParts[1];
-    
+
     const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}`);
     return { ...response.data, owner, repo };
   } catch (error) {
@@ -63,17 +54,17 @@ const analyzeRepoStructure = async (owner, repo) => {
   try {
     const contentsResponse = await axios.get(`https://api.github.com/repos/${owner}/${repo}/contents`);
     const readmeResponse = await axios.get(`https://api.github.com/repos/${owner}/${repo}/readme`).catch(() => null);
-    
+
     const files = contentsResponse.data;
-    const codeFiles = files.filter(file => 
+    const codeFiles = files.filter(file =>
       file.name.match(/\.(js|ts|tsx|jsx|py|java|cpp|c|go|rs|php|rb|swift|kt|scala|css|html|vue|svelte)$/i)
     );
-    
+
     let readmeContent = '';
     if (readmeResponse) {
       readmeContent = Buffer.from(readmeResponse.data.content, 'base64').toString('utf-8');
     }
-    
+
     return {
       files: files.map(f => ({ name: f.name, type: f.type })),
       codeFiles: codeFiles.map(f => ({ name: f.name, language: getLanguageFromFile(f.name) })),
@@ -133,12 +124,19 @@ const generateProjectInsights = async (repoData, structure) => {
     `;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o-mini-2024-07-18",
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 800
+      max_tokens: 1000
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    let content = response.choices[0].message.content.trim();
+    // Remove markdown code blocks if present
+    if (content.startsWith('```json')) {
+      content = content.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (content.startsWith('```')) {
+      content = content.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+    return JSON.parse(content);
   } catch (error) {
     console.error('AI Analysis Error:', error);
     return {
@@ -161,12 +159,12 @@ const generateProfessionalSummary = async (allAnalyses, username) => {
     Based on the following project analyses for developer ${username}, create a professional summary and skills assessment:
     
     Projects Analyzed:
-    ${allAnalyses.map(analysis => `
-    - ${analysis.name}: ${analysis.insights.projectSummary}
-    - Skills: ${analysis.insights.technicalSkills.join(', ')}
-    - Level: ${analysis.insights.skillLevel}
-    - Innovation: ${analysis.insights.innovationScore}/10
-    `).join('\n')}
+${allAnalyses.map(analysis => `
+- ${analysis.name}: ${analysis.insights.projectSummary}
+- Skills: ${Array.isArray(analysis.insights.technicalSkills) ? analysis.insights.technicalSkills.join(', ') : (analysis.insights.technicalSkills || 'N/A')}
+- Level: ${analysis.insights.skillLevel}
+- Innovation: ${analysis.insights.innovationScore}/10
+`).join('\n')}
     
     Generate:
     1. Professional summary (3-4 sentences for resume header)
@@ -185,7 +183,14 @@ const generateProfessionalSummary = async (allAnalyses, username) => {
       max_tokens: 600
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    let content = response.choices[0].message.content.trim();
+    // Remove markdown code blocks if present
+    if (content.startsWith('```json')) {
+      content = content.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (content.startsWith('```')) {
+      content = content.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+    return JSON.parse(content);
   } catch (error) {
     console.error('Summary Generation Error:', error);
     return {
@@ -209,6 +214,10 @@ app.post('/api/analyze-resume', async (req, res) => {
   const socketId = req.headers['socket-id'];
 
   try {
+    console.log('=== ANALYSIS REQUEST STARTED ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('Socket ID:', socketId);
+
     if (!repositories || repositories.length === 0) {
       throw new Error('At least one repository is required');
     }
@@ -224,17 +233,24 @@ app.post('/api/analyze-resume', async (req, res) => {
     };
 
     emitProgress('fetching', 10, 'Fetching repository information...');
-    
+
     // Fetch repository data
+    console.log('Starting repository analysis for:', repositories);
     const repoAnalyses = [];
     for (let i = 0; i < repositories.length; i++) {
       const repoUrl = repositories[i];
+      console.log(`\n--- Analyzing repository ${i + 1}/${repositories.length}: ${repoUrl} ---`);
       emitProgress('fetching', 10 + (i * 30 / repositories.length), `Analyzing ${repoUrl}...`);
-      
+
       const repoData = await fetchGitHubRepo(repoUrl);
+      console.log('Repo data fetched:', { name: repoData.name, language: repoData.language, stars: repoData.stargazers_count });
+
       const structure = await analyzeRepoStructure(repoData.owner, repoData.repo);
+      console.log('Repo structure analyzed:', { filesCount: structure.files.length, codeFilesCount: structure.codeFiles.length });
+
       const insights = await generateProjectInsights(repoData, structure);
-      
+      console.log('AI insights generated:', { innovationScore: insights.innovationScore, skillLevel: insights.skillLevel });
+
       repoAnalyses.push({
         url: repoUrl,
         name: repoData.name,
@@ -247,13 +263,18 @@ app.post('/api/analyze-resume', async (req, res) => {
       });
     }
 
+    console.log('\n=== REPOSITORY ANALYSIS COMPLETE ===');
+    console.log('Total repositories analyzed:', repoAnalyses.length);
+    console.log('Repo analyses summary:', repoAnalyses.map(r => ({ name: r.name, language: r.language, innovationScore: r.insights.innovationScore })));
+
     emitProgress('generating', 70, 'Generating professional summary...');
-    
+
     // Generate professional summary and skills
     const professionalProfile = await generateProfessionalSummary(repoAnalyses, username);
-    
+    console.log('Professional profile generated:', JSON.stringify(professionalProfile, null, 2));
+
     emitProgress('generating', 85, 'Creating resume data...');
-    
+
     // Compile comprehensive resume data
     const resumeData = {
       personalInfo: {
@@ -271,9 +292,9 @@ app.post('/api/analyze-resume', async (req, res) => {
       projects: repoAnalyses.map(repo => ({
         name: repo.name,
         description: repo.insights.resumeDescription,
-        technologies: repo.insights.technicalSkills,
+        technologies: Array.isArray(repo.insights.technicalSkills) ? repo.insights.technicalSkills : [repo.insights.technicalSkills].filter(Boolean),
         githubUrl: repo.url,
-        keyFeatures: repo.insights.keyFeatures,
+        keyFeatures: Array.isArray(repo.insights.keyFeatures) ? repo.insights.keyFeatures : [repo.insights.keyFeatures].filter(Boolean),
         innovationScore: repo.insights.innovationScore
       })),
       technicalProfile: {
@@ -283,6 +304,14 @@ app.post('/api/analyze-resume', async (req, res) => {
         industryStrengths: professionalProfile.industryStrengths
       }
     };
+
+    console.log('\n=== RESUME DATA COMPILED ===');
+    console.log('Resume data structure:', {
+      personalInfo: !!resumeData.personalInfo,
+      skills: !!resumeData.skills,
+      projects: resumeData.projects.length,
+      technicalProfile: !!resumeData.technicalProfile
+    });
 
     // Save to database
     const resume = new Resume({
@@ -295,6 +324,7 @@ app.post('/api/analyze-resume', async (req, res) => {
     });
 
     await resume.save();
+    console.log('Resume saved to database with ID:', resume._id);
 
     emitProgress('complete', 100, 'Resume generated successfully!');
 
@@ -306,6 +336,10 @@ app.post('/api/analyze-resume', async (req, res) => {
       }
     };
 
+    console.log('=== SENDING RESPONSE ===');
+    console.log('Response data keys:', Object.keys(responseData.data));
+    console.log('Analysis ID:', responseData.data.analysisId);
+
     if (socketId) {
       io.to(socketId).emit('analysisComplete', responseData);
     }
@@ -313,7 +347,11 @@ app.post('/api/analyze-resume', async (req, res) => {
     res.json(responseData);
 
   } catch (error) {
-    console.error('Analysis Error:', error);
+    console.error('=== ANALYSIS ERROR ===');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Request data:', { repositories, username, linkedinUrl });
+
     if (socketId) {
       io.to(socketId).emit('analysisError', { error: error.message });
     }
@@ -337,7 +375,7 @@ app.get('/api/resume/:id', async (req, res) => {
 // Socket.io connection
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
-  
+
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
   });
