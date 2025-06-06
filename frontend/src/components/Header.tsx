@@ -16,9 +16,9 @@ export function Header() {
             </Link>
             <nav className="hidden md:flex items-center gap-6 text-sm">
               <Link to="/" className="hover:text-purple-400 transition">Home</Link>
-              <Link to="/analyze" className="hover:text-purple-400 transition">Analyze</Link>
-              <Link to="/features" className="hover:text-purple-400 transition">Features</Link>
-              <Link to="/about" className="hover:text-purple-400 transition">About</Link>
+              <Link to="/analysis" className="hover:text-purple-400 transition">Analysis</Link>
+              <Link to="/" className="hover:text-purple-400 transition">Features</Link>
+              <Link to="/" className="hover:text-purple-400 transition">About</Link>
             </nav>
           </div>
 

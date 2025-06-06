@@ -1,51 +1,23 @@
 import { create } from 'zustand';
 
-export const useAnalysisStore = create((set, get) => ({
-  // State
-  username: '',
-  isAnalyzing: false,
-  progress: 0,
-  currentStep: '',
-  currentMessage: '',
-  analysisResult: null,
-  error: null,
-  socket: null,
+export const useAppStore = create((set) => ({
+  // Resume data
+  resumeData: null,
+  setResumeData: (data) => set({ resumeData: data }),
 
-  // Actions
-  setUsername: (username) => set({ username }),
-  
-  setSocket: (socket) => set({ socket }),
-  
-  startAnalysis: () => set({ 
-    isAnalyzing: true, 
-    progress: 0, 
-    error: null,
-    analysisResult: null 
-  }),
-  
-  updateProgress: (step, progress, message) => set({ 
-    currentStep: step, 
-    progress, 
-    currentMessage: message 
-  }),
-  
-  setAnalysisResult: (result) => set({ 
-    analysisResult: result, 
-    isAnalyzing: false, 
-    progress: 100 
-  }),
-  
-  setError: (error) => set({ 
-    error, 
-    isAnalyzing: false 
-  }),
-  
-  reset: () => set({ 
-    progress: 0, 
-    currentStep: '', 
-    currentMessage: '', 
-    analysisResult: null, 
-    error: null, 
-    isAnalyzing: false 
-  })
+  // Loading state
+  loading: false,
+  setLoading: (value) => set({ loading: value }),
+
+  // Error state
+  error: null,
+  setError: (value) => set({ error: value }),
+
+  // Progress tracking
+  progress: { step: '', progress: 0, message: '' },
+  setProgress: (newProgress) => set({ progress: newProgress }),
+
+  // Print mode
+  isPrintMode: false,
+  setIsPrintMode: (value) => set({ isPrintMode: value }),
 }));

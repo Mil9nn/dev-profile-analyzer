@@ -1,6 +1,18 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+
+.print-mode {
+  background-color: white !important;
+  color: black !important;
+}
+
+.print-mode * {
+  color: black !important;
+  background-color: white !important;
+  border-color: black !important;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

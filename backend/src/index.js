@@ -15,7 +15,6 @@ const server = createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "http://localhost:5173",
-    methods: ["GET", "POST"]
   }
 });
 
@@ -156,25 +155,30 @@ const generateProjectInsights = async (repoData, structure) => {
 const generateProfessionalSummary = async (allAnalyses, username) => {
   try {
     const prompt = `
-    Based on the following project analyses for developer ${username}, create a professional summary and skills assessment:
-    
-    Projects Analyzed:
-${allAnalyses.map(analysis => `
-- ${analysis.name}: ${analysis.insights.projectSummary}
-- Skills: ${Array.isArray(analysis.insights.technicalSkills) ? analysis.insights.technicalSkills.join(', ') : (analysis.insights.technicalSkills || 'N/A')}
-- Level: ${analysis.insights.skillLevel}
-- Innovation: ${analysis.insights.innovationScore}/10
-`).join('\n')}
-    
-    Generate:
-    1. Professional summary (3-4 sentences for resume header)
-    2. Core technical skills (categorized)
-    3. Specialization areas
-    4. Experience level assessment
-    5. Industry strengths
-    6. Unique value proposition
-    
-    Respond in JSON format with keys: professionalSummary, coreSkills, specializations, experienceLevel, industryStrengths, valueProposition
+      Based on the following project analyses for developer ${username}, create a detailed professional summary and skill profile.
+
+      Projects Analyzed:
+      ${allAnalyses.map(analysis => `
+      - ${analysis.name}: ${analysis.insights.projectSummary}
+      - Skills: ${Array.isArray(analysis.insights.technicalSkills) ? analysis.insights.technicalSkills.join(', ') : (analysis.insights.technicalSkills || 'N/A')}
+      - Level: ${analysis.insights.skillLevel}
+      - Innovation: ${analysis.insights.innovationScore}/10
+      `).join('\n')}
+
+      Please return the following in strict JSON format. Ensure proper data types:
+
+      {
+        "professionalSummary": "string (3-4 sentences)",
+        "coreSkills": {
+          "Programming Languages": ["array of strings"],
+          "Frameworks/Libraries": ["array of strings"],
+          "Tools/Platforms": ["array of strings"]
+        },
+        "specializations": ["array of strings"],
+        "experienceLevel": "string (e.g., Beginner, Intermediate, Advanced)",
+        "industryStrengths": ["array of strings (e.g., Web Development, SaaS, EdTech)"],
+        "valueProposition": "string (1-2 sentences summarizing developer's unique value)"
+      }
     `;
 
     const response = await openai.chat.completions.create({
@@ -184,29 +188,35 @@ ${allAnalyses.map(analysis => `
     });
 
     let content = response.choices[0].message.content.trim();
-    // Remove markdown code blocks if present
+
+    // Remove markdown code block wrapper if present
     if (content.startsWith('```json')) {
       content = content.replace(/^```json\s*/, '').replace(/\s*```$/, '');
     } else if (content.startsWith('```')) {
       content = content.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
+
+    // Attempt to parse JSON
     return JSON.parse(content);
   } catch (error) {
     console.error('Summary Generation Error:', error);
+
+    // Safe fallback
     return {
       professionalSummary: `Skilled software developer with expertise in multiple programming languages and modern development practices.`,
       coreSkills: {
-        'Programming Languages': ['JavaScript', 'Python'],
-        'Technologies': ['React', 'Node.js'],
-        'Tools': ['Git', 'Docker']
+        "Programming Languages": ["JavaScript", "Python"],
+        "Frameworks/Libraries": ["React", "Express"],
+        "Tools/Platforms": ["Git", "Docker"]
       },
-      specializations: ['Full-Stack Development'],
-      experienceLevel: 'Intermediate',
-      industryStrengths: ['Web Development'],
-      valueProposition: 'Delivers high-quality, scalable software solutions with modern best practices.'
+      specializations: ["Full-Stack Development"],
+      experienceLevel: "Intermediate",
+      industryStrengths: ["Web Development"],
+      valueProposition: "Delivers high-quality, scalable software solutions with modern best practices."
     };
   }
 };
+
 
 // Main analysis endpoint
 app.post('/api/analyze-resume', async (req, res) => {
