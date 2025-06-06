@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Github, Plus, Trash2, Linkedin, Sparkles, User } from 'lucide-react';
 import { useAnalysisStore } from '../store/useAnalysisStore';
