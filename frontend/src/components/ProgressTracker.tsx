@@ -1,4 +1,3 @@
-// frontend/src/components/ProgressTracker.tsx
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Github, Code, Brain, FileCheck, AlertCircle } from 'lucide-react';
@@ -22,8 +21,14 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({
 }) => {
   const steps = [
     { 
+      key: 'starting', 
+      label: 'Initializing', 
+      icon: Github,
+      description: 'Starting analysis...'
+    },
+    { 
       key: 'fetching', 
-      label: 'Fetching Repos', 
+      label: 'Fetching Data', 
       icon: Github,
       description: 'Collecting repository data...'
     },
@@ -48,11 +53,13 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({
   ];
 
   const getCurrentStepIndex = () => {
-    return steps.findIndex(step => step.key === progress.step);
+    const index = steps.findIndex(step => step.key === progress.step);
+    return index === -1 ? 0 : index;
   };
 
   const currentStepIndex = getCurrentStepIndex();
 
+  // Don't render if not analyzing and no error and not complete
   if (!isAnalyzing && !error && progress.step !== 'complete') {
     return null;
   }
@@ -63,7 +70,7 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
-        className="w-full max-w-2xl mx-auto"
+        className="w-full max-w-2xl mx-auto mb-8"
       >
         <div className="bg-zinc-900/95 backdrop-blur-lg rounded-xl p-8 border border-zinc-700 shadow-2xl">
           {error ? (
@@ -116,7 +123,7 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({
               </div>
 
               {/* Step Indicators */}
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-5 gap-4">
                 {steps.map((step, index) => {
                   const isActive = progress.step === step.key;
                   const isCompleted = currentStepIndex > index || progress.step === 'complete';
