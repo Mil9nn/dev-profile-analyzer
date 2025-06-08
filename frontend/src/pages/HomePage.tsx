@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import InputForm from '../components/InputForm';
+import ProgressTracker from '../components/ProgressTracker'; // Import your ProgressTracker
 import { EmptyState } from '@/components/EmptyState';
 
 interface FormData {
@@ -44,26 +45,8 @@ const HomePage = () => {
     resetAnalysis();
   };
 
-  // Show loading state during analysis
-  if (isAnalyzing) {
-    return (
-      <div className="max-w-2xl mx-auto p-8">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold text-white mb-4">Analyzing Your Repositories</h2>
-          <div className="w-full bg-zinc-700 rounded-full h-2 mb-4">
-            <div
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${progress.progress}%` }}
-            />
-          </div>
-          <p className="text-sm text-zinc-400 mt-2">{progress.step}: {progress.message}</p>
-        </div>
-      </div>
-    );
-  }
-
   // Show error state with retry option
-  if (error) {
+  if (error && !isAnalyzing) {
     return (
       <div className="max-w-2xl mx-auto p-8">
         <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-6 mb-6">
@@ -85,7 +68,6 @@ const HomePage = () => {
   if (resumeData) {
     return (
       <div className="max-w-5xl mx-auto p-4">
-        {/* Add your resume display components here */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 mb-6">
           <h2 className="text-2xl font-bold text-white mb-4">Resume Generated Successfully!</h2>
           <p className="text-zinc-400 mb-4">Your developer profile has been analyzed.</p>
@@ -101,12 +83,24 @@ const HomePage = () => {
     );
   }
 
-  // Default state - show input form
+  // Default state - show input form and progress tracker
   return (
     <div className="max-w-5xl mx-auto flex items-center justify-center min-h-screen p-4">
       <div className="w-full">
-        <InputForm onSubmit={handleAnalyze} loading={isAnalyzing} error={error} />
-        <EmptyState />
+        {/* Show ProgressTracker when analyzing or when there's an error during analysis */}
+        <ProgressTracker 
+          isAnalyzing={isAnalyzing} 
+          progress={progress} 
+          error={error} 
+        />
+        
+        {/* Show InputForm when not analyzing or when there's an error */}
+        {(!isAnalyzing || error) && (
+          <>
+            <InputForm onSubmit={handleAnalyze} loading={isAnalyzing} error={error} />
+            {!isAnalyzing && !error && <EmptyState />}
+          </>
+        )}
       </div>
     </div>
   );

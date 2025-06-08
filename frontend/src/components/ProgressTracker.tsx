@@ -19,24 +19,23 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({
   progress, 
   error 
 }) => {
+  // Debug logging to check if updates are being received
+  React.useEffect(() => {
+    console.log('ProgressTracker received update:', { 
+      step: progress.step, 
+      progress: progress.progress, 
+      message: progress.message,
+      isAnalyzing 
+    });
+  }, [progress, isAnalyzing]);
+
+  // Updated steps to match backend emissions
   const steps = [
-    { 
-      key: 'starting', 
-      label: 'Initializing', 
-      icon: Github,
-      description: 'Starting analysis...'
-    },
     { 
       key: 'fetching', 
       label: 'Fetching Data', 
       icon: Github,
       description: 'Collecting repository data...'
-    },
-    { 
-      key: 'analyzing', 
-      label: 'Analyzing Code', 
-      icon: Code,
-      description: 'Examining code structure...'
     },
     { 
       key: 'generating', 
@@ -64,6 +63,10 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({
     return null;
   }
 
+  // Handle initial state when analysis starts but no progress updates yet
+  const displayProgress = progress.progress || (isAnalyzing && progress.step === '' ? 0 : progress.progress);
+  const displayMessage = progress.message || (isAnalyzing ? 'Starting analysis...' : progress.message);
+
   return (
     <AnimatePresence>
       <motion.div
@@ -89,7 +92,7 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({
                 </h3>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-purple-400">
-                    {Math.round(progress.progress)}%
+                    {Math.round(displayProgress)}%
                   </div>
                   <div className="text-sm text-zinc-400">Progress</div>
                 </div>
@@ -98,13 +101,13 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({
               {/* Progress Bar */}
               <div className="mb-8">
                 <div className="flex justify-between text-sm text-purple-200 mb-3">
-                  <span className="font-medium">{progress.message}</span>
+                  <span className="font-medium">{displayMessage}</span>
                 </div>
                 <div className="w-full bg-zinc-800 rounded-full h-3 overflow-hidden">
                   <motion.div
                     className="bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-500 h-full rounded-full relative"
                     initial={{ width: 0 }}
-                    animate={{ width: `${progress.progress}%` }}
+                    animate={{ width: `${displayProgress}%` }}
                     transition={{ duration: 0.8, ease: "easeOut" }}
                   >
                     <motion.div
@@ -123,9 +126,9 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({
               </div>
 
               {/* Step Indicators */}
-              <div className="grid grid-cols-5 gap-4">
+              <div className="grid grid-cols-3 gap-6">
                 {steps.map((step, index) => {
-                  const isActive = progress.step === step.key;
+                  const isActive = progress.step === step.key || (isAnalyzing && progress.step === '' && index === 0);
                   const isCompleted = currentStepIndex > index || progress.step === 'complete';
                   const Icon = step.icon;
 
