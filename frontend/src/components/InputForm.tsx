@@ -1,4 +1,3 @@
-// frontend/src/components/AnalysisForm.tsx
 import React, { useState } from 'react';
 import { Github, Linkedin, Loader2, AlertCircle } from 'lucide-react';
 
@@ -8,13 +7,13 @@ interface FormData {
   repositories: string[];
 }
 
-interface AnalysisFormProps {
+interface InputFormProps {
   onSubmit: (formData: FormData) => void;
   loading: boolean;
   error?: string | null;
 }
 
-const AnalysisForm: React.FC<AnalysisFormProps> = ({ onSubmit, loading, error }) => {
+const InputForm: React.FC<InputFormProps> = ({ onSubmit, loading, error }) => {
   const [formData, setFormData] = useState<FormData>({
     username: '',
     linkedinUrl: '',
@@ -122,6 +121,30 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onSubmit, loading, error })
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* GitHub Username */}
+        <div>
+          <label className="block text-sm font-medium text-zinc-300 mb-2">
+            <Github className="w-4 h-4 inline mr-2" />
+            GitHub Username *
+          </label>
+          <input
+            name="username"
+            type="text"
+            value={formData.username}
+            onChange={(e) => handleUsernameChange(e.target.value)}
+            className={`w-full px-4 py-3 bg-zinc-800 border rounded-lg text-white focus:outline-none focus:ring-2 transition-colors ${
+              validationErrors.username 
+                ? 'border-red-500 focus:ring-red-500' 
+                : 'border-zinc-600 focus:ring-purple-500'
+            }`}
+            placeholder="your-github-username"
+            disabled={loading}
+          />
+          {validationErrors.username && (
+            <p className="text-red-400 text-sm mt-1">{validationErrors.username}</p>
+          )}
+        </div>
+
         {/* LinkedIn URL */}
         <div>
           <label className="block text-sm font-medium text-zinc-300 mb-2">
@@ -129,6 +152,7 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onSubmit, loading, error })
             LinkedIn Profile URL (Optional)
           </label>
           <input
+            name="url"
             type="url"
             value={formData.linkedinUrl}
             onChange={(e) => handleLinkedInChange(e.target.value)}
@@ -148,11 +172,12 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onSubmit, loading, error })
         {/* Repository URLs */}
         <div>
           <label className="block text-sm font-medium text-zinc-300 mb-2">
-            GitHub Repository URLs (your top 03) *
+            GitHub Repository URLs (your top 3) *
           </label>
           <div className="space-y-3">
             {formData.repositories.map((repo, index) => (
               <input
+                name="url"
                 key={index}
                 type="url"
                 value={repo}
@@ -195,4 +220,4 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onSubmit, loading, error })
   );
 };
 
-export default AnalysisForm;
+export default InputForm;
