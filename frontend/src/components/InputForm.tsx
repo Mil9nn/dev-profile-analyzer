@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Github, Linkedin, Loader2, AlertCircle } from 'lucide-react';
 
 interface FormData {
-  username: string;
   linkedinUrl: string;
   repositories: string[];
 }
@@ -15,7 +14,6 @@ interface InputFormProps {
 
 const InputForm: React.FC<InputFormProps> = ({ onSubmit, loading, error }) => {
   const [formData, setFormData] = useState<FormData>({
-    username: '',
     linkedinUrl: '',
     repositories: ['', '', '']
   });
@@ -24,11 +22,6 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, loading, error }) => {
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
-
-    // Validate username
-    if (!formData.username.trim()) {
-      errors.username = 'GitHub username is required';
-    }
 
     // Validate repositories
     const validRepos = formData.repositories.filter(repo => repo.trim() !== '');
@@ -85,13 +78,6 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, loading, error }) => {
     }
   };
 
-  const handleUsernameChange = (value: string) => {
-    setFormData(prev => ({ ...prev, username: value }));
-    if (validationErrors.username) {
-      setValidationErrors(prev => ({ ...prev, username: '' }));
-    }
-  };
-
   const handleLinkedInChange = (value: string) => {
     setFormData(prev => ({ ...prev, linkedinUrl: value }));
     if (validationErrors.linkedinUrl) {
@@ -121,30 +107,6 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, loading, error }) => {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* GitHub Username */}
-        <div>
-          <label className="block text-sm font-medium text-zinc-300 mb-2">
-            <Github className="w-4 h-4 inline mr-2" />
-            GitHub Username *
-          </label>
-          <input
-            name="username"
-            type="text"
-            value={formData.username}
-            onChange={(e) => handleUsernameChange(e.target.value)}
-            className={`w-full px-4 py-3 bg-zinc-800 border rounded-lg text-white focus:outline-none focus:ring-2 transition-colors ${
-              validationErrors.username 
-                ? 'border-red-500 focus:ring-red-500' 
-                : 'border-zinc-600 focus:ring-purple-500'
-            }`}
-            placeholder="your-github-username"
-            disabled={loading}
-          />
-          {validationErrors.username && (
-            <p className="text-red-400 text-sm mt-1">{validationErrors.username}</p>
-          )}
-        </div>
-
         {/* LinkedIn URL */}
         <div>
           <label className="block text-sm font-medium text-zinc-300 mb-2">

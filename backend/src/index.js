@@ -224,8 +224,6 @@ app.post('/api/analyze-resume', async (req, res) => {
   const socketId = req.headers['socket-id'];
 
   try {
-    console.log('=== ANALYSIS REQUEST STARTED ===');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
     console.log('Socket ID:', socketId);
 
     if (!repositories || repositories.length === 0) {
@@ -245,21 +243,14 @@ app.post('/api/analyze-resume', async (req, res) => {
     emitProgress('fetching', 10, 'Fetching repository information...');
 
     // Fetch repository data
-    console.log('Starting repository analysis for:', repositories);
     const repoAnalyses = [];
     for (let i = 0; i < repositories.length; i++) {
       const repoUrl = repositories[i];
-      console.log(`\n--- Analyzing repository ${i + 1}/${repositories.length}: ${repoUrl} ---`);
       emitProgress('fetching', 10 + (i * 30 / repositories.length), `Analyzing ${repoUrl}...`);
 
       const repoData = await fetchGitHubRepo(repoUrl);
-      console.log('Repo data fetched:', { name: repoData.name, language: repoData.language, stars: repoData.stargazers_count });
-
       const structure = await analyzeRepoStructure(repoData.owner, repoData.repo);
-      console.log('Repo structure analyzed:', { filesCount: structure.files.length, codeFilesCount: structure.codeFiles.length });
-
       const insights = await generateProjectInsights(repoData, structure);
-      console.log('AI insights generated:', { innovationScore: insights.innovationScore, skillLevel: insights.skillLevel });
 
       repoAnalyses.push({
         url: repoUrl,
@@ -273,15 +264,10 @@ app.post('/api/analyze-resume', async (req, res) => {
       });
     }
 
-    console.log('\n=== REPOSITORY ANALYSIS COMPLETE ===');
-    console.log('Total repositories analyzed:', repoAnalyses.length);
-    console.log('Repo analyses summary:', repoAnalyses.map(r => ({ name: r.name, language: r.language, innovationScore: r.insights.innovationScore })));
-
     emitProgress('generating', 70, 'Generating professional summary...');
 
     // Generate professional summary and skills
     const professionalProfile = await generateProfessionalSummary(repoAnalyses, username);
-    console.log('Professional profile generated:', JSON.stringify(professionalProfile, null, 2));
 
     emitProgress('generating', 85, 'Creating resume data...');
 
@@ -315,14 +301,6 @@ app.post('/api/analyze-resume', async (req, res) => {
       }
     };
 
-    console.log('\n=== RESUME DATA COMPILED ===');
-    console.log('Resume data structure:', {
-      personalInfo: !!resumeData.personalInfo,
-      skills: !!resumeData.skills,
-      projects: resumeData.projects.length,
-      technicalProfile: !!resumeData.technicalProfile
-    });
-
     // Save to database
     const resume = new Resume({
       username,
@@ -334,7 +312,6 @@ app.post('/api/analyze-resume', async (req, res) => {
     });
 
     await resume.save();
-    console.log('Resume saved to database with ID:', resume._id);
 
     emitProgress('complete', 100, 'Resume generated successfully!');
 

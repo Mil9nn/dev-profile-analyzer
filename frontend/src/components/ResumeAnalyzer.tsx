@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axiosInstance from '../config/axios.ts';
 import { Loader2, Github, Linkedin, Code, Zap, Trophy, User, Briefcase, AlignLeft, FolderGit2, Mail, Download, DownloadCloud, FilePlus } from 'lucide-react';
 
@@ -15,15 +15,8 @@ interface FormData {
     repositories: string[];
 }
 
-
 const PersonalInfo = ({ personalInfo }: { personalInfo: any }) => (
     <div className="">
-
-        {/* <div>
-                <h1 className="text-2xl font-semibold text-white">{personalInfo.name}</h1>
-                <p className="text-zinc-400 text-sm">@{personalInfo.githubUsername}</p>
-            </div> */}
-
         <div className="border-b border-zinc-700 pb-4 mb-6">
             <h2 className="text-2xl text-center font-bold mb-4 pb-1 text-white">
                 Murli Manohar Milan Singh
@@ -47,8 +40,6 @@ const PersonalInfo = ({ personalInfo }: { personalInfo: any }) => (
             </div>
         </div>
 
-
-
         <div>
             <h2 className="text-2xl font-bold mb-4 pb-1 text-white">
                 <AlignLeft className="inline-block mr-2 text-blue-400" />
@@ -60,7 +51,6 @@ const PersonalInfo = ({ personalInfo }: { personalInfo: any }) => (
             <p className="text-blue-300 italic text-sm mb-4">
                 {personalInfo.valueProposition}
             </p>
-
         </div>
 
         <div className="flex gap-4 mt-4">
@@ -97,7 +87,6 @@ const Skills = ({ skills }: { skills: any }) => (
         </h2>
 
         <div className="grid md:grid-cols-1 gap-6">
-            {/* Core Skills Only */}
             <div>
                 <h3 className="text-lg font-semibold text-zinc-200 mb-3">Core Skills</h3>
                 {Object.entries(skills.core).map(([category, skillList]: [string, any]) => (
@@ -182,7 +171,6 @@ const TechnicalProfile = ({ technicalProfile, skills, projects }) => (
         </h2>
 
         <div className="flex flex-col gap-5">
-            {/* Metrics */}
             <div className="flex items-center justify-between flex-wrap">
                 <div className="bg-blue-500/10 p-2 rounded-sm">
                     <h3 className="text-sm font-medium text-blue-300 mb-1 uppercase tracking-wide">Projects Analyzed</h3>
@@ -271,7 +259,7 @@ const ErrorMessage = ({ error, onRetry }) => (
         <p className="text-red-600 mb-3">{error}</p>
         <button
             onClick={onRetry}
-            className="bg-red-500  px-4 py-2 rounded-md hover:bg-red-600"
+            className="bg-red-500 px-4 py-2 rounded-md hover:bg-red-600"
         >
             Try Again
         </button>
@@ -280,15 +268,29 @@ const ErrorMessage = ({ error, onRetry }) => (
 
 // Main App Component
 const ResumeAnalyzer = () => {
-    const [loading, setLoading] = useState(false);
     const {
         resumeData, setResumeData,
         error, setError,
         progress, setProgress,
-        isPrintMode, setIsPrintMode
+        isPrintMode, setIsPrintMode,
+        isAnalyzing,
+        startAnalysis,
+        resetAnalysis,
+        initializeSocket,
+        disconnectSocket
     } = useAnalysisStore();
 
     const resumeRef = useRef();
+
+    // Initialize socket when component mounts
+    useEffect(() => {
+        initializeSocket().catch(console.error);
+
+        // Cleanup on unmount
+        return () => {
+            disconnectSocket();
+        };
+    }, [initializeSocket, disconnectSocket]);
 
     const handleDownload = async () => {
         if (!resumeRef.current) {
@@ -303,32 +305,22 @@ const ResumeAnalyzer = () => {
             setIsPrintMode(true);
             await new Promise((resolve) => setTimeout(resolve, 200));
 
-            // Use html2canvas-pro with some options for better quality
             const canvas = await html2canvas(element, {
-                scale: 2,                // Increase scale for higher resolution
-                useCORS: true,           // Enable if you have cross-origin images
-                backgroundColor: '#fff', // Set white background (important if your resume has transparent bg)
-                scrollY: -window.scrollY // Fix for vertical scroll offset
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#fff',
+                scrollY: -window.scrollY
             });
 
             const imgData = canvas.toDataURL('image/png');
-
-            // Create jsPDF instance - 'p' for portrait, 'mm' units, A4 size
             const pdf = new jsPDF('p', 'mm', 'a4');
-
-            // Calculate width & height of PDF page in px
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
-
-            // Calculate canvas image dimensions to fit PDF while keeping aspect ratio
             const imgProps = pdf.getImageProperties(imgData);
             const imgWidth = pdfWidth;
             const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
 
-            // Add image to PDF (starting at top-left corner)
             pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-
-            // Save/download the PDF file
             pdf.save('resume.pdf');
 
         } catch (error) {
@@ -339,56 +331,28 @@ const ResumeAnalyzer = () => {
         }
     };
 
-    const handleAnalyze = async (formData) => {
-        setLoading(true);
-        setError(null);
-        setResumeData(null);
-        setProgress({ step: 'starting', progress: 0, message: 'Initializing analysis...' });
-
-        try {
-            const response = await axiosInstance.post('/analyze-resume', formData);
-
-            const { success, data, error } = response.data;
-
-            if (success) {
-                setResumeData(data.resumeData);
-                setProgress({ step: 'complete', progress: 100, message: 'Analysis complete!' });
-            } else {
-                throw new Error(error || 'Analysis failed');
-            }
-        } catch (err) {
-            console.error('Analysis error:', err);
-
-            const errorMessage = err.response?.data?.error || err.message || 'Failed to analyze repositories';
-
-            setError(errorMessage);
-            setProgress({ step: 'error', progress: 0, message: 'Analysis failed' });
-        } finally {
-            setLoading(false);
-        }
-
+    const handleAnalyze = async (formData: FormData) => {
+        await startAnalysis(formData);
     };
 
     const handleRetry = () => {
-        setError(null);
-        setResumeData(null);
-        setProgress({ step: '', progress: 0, message: '' });
+        resetAnalysis();
     };
 
     return (
         <div>
             <div className="container mx-auto p-4">
                 
-                {loading && (
+                {isAnalyzing && (
                     <ProgressTracker
-                        isAnalyzing={loading}
+                        isAnalyzing={isAnalyzing}
                         progress={progress}
                         error={error}
                     />
                 )}
 
-                {!resumeData && !loading && (
-                    <InputForm onSubmit={handleAnalyze} loading={loading} />
+                {!resumeData && !isAnalyzing && (
+                    <InputForm onSubmit={handleAnalyze} loading={isAnalyzing} />
                 )}
 
                 {resumeData && (
@@ -399,7 +363,6 @@ const ResumeAnalyzer = () => {
                             projects={resumeData.projects}
                         />
 
-                        {/* Resume Buttons Section */}
                         <div className="flex items-center justify-between mt-8 space-x-4">
                             <div className="flex items-center gap-5">
                                 <button onClick={handleDownload}
@@ -412,10 +375,7 @@ const ResumeAnalyzer = () => {
                                 </button>
 
                                 <button
-                                    onClick={() => {
-                                        setResumeData(null);
-                                        setProgress({ step: '', progress: 0, message: '' });
-                                    }}
+                                    onClick={resetAnalysis}
                                     className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-full hover:bg-blue-700 transition-colors text-sm font-medium"
                                 >
                                     <FilePlus className="w-4 h-4" />
@@ -438,7 +398,6 @@ const ResumeAnalyzer = () => {
                             </label>
                         </div>
 
-                        {/* Resume Section */}
                         <div ref={resumeRef} className={`pdf-friendly mx-auto my-10 p-10 shadow-2xl border 
                             ${isPrintMode ? 'print-mode' : ''}
                             resume-section`}

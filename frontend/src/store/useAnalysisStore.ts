@@ -63,7 +63,7 @@ interface AnalysisStore {
 
   // Socket connection
   socket: Socket | null;
-  initializeSocket: () => void;
+  initializeSocket: () => Promise<Socket>;
   disconnectSocket: () => void;
 
   // Analysis actions
@@ -89,74 +89,82 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
 
   // Socket management
   initializeSocket: () => {
-    const { socket } = get();
-    
-    // Don't create multiple connections
-    if (socket && socket.connected) {
-      return;
-    }
+    return new Promise((resolve, reject) => {
+      const { socket } = get();
+      
+      // Return existing connected socket
+      if (socket && socket.connected) {
+        resolve(socket);
+        return;
+      }
 
-    console.log('Initializing socket connection...');
-    const newSocket = io('http://localhost:5000', {
-      transports: ['websocket', 'polling'],
-      timeout: 20000,
-    });
+      const newSocket = io('http://localhost:5000', {
+        transports: ['websocket', 'polling'],
+        timeout: 20000,
+      });
 
-    set({ socket: newSocket });
+      set({ socket: newSocket });
 
-    newSocket.on('connect', () => {
-      console.log('Socket connected:', newSocket.id);
-    });
+      newSocket.on('connect', () => {
+        console.log(`Socket connected: ${newSocket.id}`);
+        resolve(newSocket);
+      });
 
-    newSocket.on('disconnect', () => {
-      console.log('Socket disconnected');
-    });
+      newSocket.on('disconnect', () => {
+        console.log('Socket disconnected');
+      });
 
-    newSocket.on('analysisProgress', (data: ProgressData) => {
-      console.log('Analysis progress:', data);
-      set({ progress: data });
-    });
+      newSocket.on('analysisProgress', (data: ProgressData) => {
+        set({ progress: data });
+      });
 
-    newSocket.on('analysisComplete', (response) => {
-      console.log('Analysis complete:', response);
-      if (response.success) {
+      newSocket.on('analysisComplete', (response) => {
+        if (response.success) {
+          set({ 
+            resumeData: response.data.resumeData,
+            isAnalyzing: false,
+            progress: { step: 'complete', progress: 100, message: 'Analysis complete!' },
+            error: null
+          });
+        } else {
+          set({ 
+            error: response.error || 'Analysis failed',
+            isAnalyzing: false,
+            progress: { step: 'error', progress: 0, message: 'Analysis failed' }
+          });
+        }
+      });
+
+      newSocket.on('analysisError', (data) => {
+        console.log('Analysis error:', data);
         set({ 
-          resumeData: response.data.resumeData,
-          isAnalyzing: false,
-          progress: { step: 'complete', progress: 100, message: 'Analysis complete!' },
-          error: null
-        });
-      } else {
-        set({ 
-          error: response.error || 'Analysis failed',
+          error: data.error || 'Analysis failed',
           isAnalyzing: false,
           progress: { step: 'error', progress: 0, message: 'Analysis failed' }
         });
-      }
-    });
-
-    newSocket.on('analysisError', (data) => {
-      console.log('Analysis error:', data);
-      set({ 
-        error: data.error || 'Analysis failed',
-        isAnalyzing: false,
-        progress: { step: 'error', progress: 0, message: 'Analysis failed' }
       });
-    });
 
-    newSocket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-      set({ 
-        error: 'Failed to connect to server. Please check if the backend is running.',
-        isAnalyzing: false
+      newSocket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+        set({ 
+          error: 'Failed to connect to server. Please check if the backend is running.',
+          isAnalyzing: false
+        });
+        reject(error);
       });
+
+      // Timeout for connection
+      setTimeout(() => {
+        if (!newSocket.connected) {
+          reject(new Error('Socket connection timeout'));
+        }
+      }, 10000);
     });
   },
 
   disconnectSocket: () => {
     const { socket } = get();
     if (socket) {
-      console.log('Disconnecting socket...');
       socket.disconnect();
       set({ socket: null });
     }
@@ -164,23 +172,24 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
 
   // Analysis action
   startAnalysis: async (formData: FormData) => {
-    const { socket } = get();
-    
-    console.log('Starting analysis with form data:', formData);
-
     try {
       // Reset state
       set({ 
         isAnalyzing: true, 
         error: null, 
         resumeData: null,
-        progress: { step: 'starting', progress: 0, message: 'Initializing analysis...' }
+        progress: { step: 'starting', progress: 0, message: 'Initializing connection...' }
       });
 
-      // Ensure socket is connected
+      // Initialize socket and wait for connection
+      const { initializeSocket } = get();
+      const socket = await initializeSocket();
+
       if (!socket || !socket.connected) {
-        throw new Error('Socket connection not established. Please refresh the page.');
+        throw new Error('Failed to establish socket connection');
       }
+
+      set({ progress: { step: 'starting', progress: 5, message: 'Sending analysis request...' } });
 
       const response = await fetch('http://localhost:5000/api/analyze-resume', {
         method: 'POST',
@@ -197,7 +206,6 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
       }
 
       const result = await response.json();
-      console.log('API response:', result);
 
       if (!result.success) {
         throw new Error(result.error || 'Analysis failed');
@@ -218,7 +226,6 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
   },
 
   resetAnalysis: () => {
-    console.log('Resetting analysis state');
     set({ 
       resumeData: null,
       isAnalyzing: false,
