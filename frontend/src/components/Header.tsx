@@ -1,9 +1,26 @@
-import { Link } from "react-router-dom"
-import { Menu, X } from "lucide-react"
-import { useState } from "react"
+import { Link, useLocation } from "react-router-dom";
+import { Menu, X } from "lucide-react";
+import { useState, useEffect } from "react";
 
 export function Header() {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false);
+  const location = useLocation();
+  const [isActivePage, setIsActivePage] = useState("Home");
+
+  // Auto-set active tab based on path
+  useEffect(() => {
+    if (location.pathname === "/") setIsActivePage("Home");
+    else if (location.pathname.includes("analysis")) setIsActivePage("Analysis");
+    else if (location.pathname.includes("resume")) setIsActivePage("Resume");
+    else if (location.pathname.includes("about")) setIsActivePage("About");
+  }, [location]);
+
+  const navItems = [
+    { name: "Home", path: "/" },
+    { name: "Analysis", path: "/analysis" },
+    { name: "Resume", path: "/resume" },
+    { name: "About", path: "/about" },
+  ];
 
   return (
     <header className="bg-zinc-900 text-white shadow-md">
@@ -14,11 +31,21 @@ export function Header() {
             <Link to="/" className="text-2xl font-bold text-purple-400">
               DevProfile
             </Link>
-            <nav className="hidden md:flex items-center gap-6 text-sm">
-              <Link to="/" className="hover:text-purple-400 transition">Home</Link>
-              <Link to="/analysis" className="hover:text-purple-400 transition">Analysis</Link>
-              <Link to="/" className="hover:text-purple-400 transition">Features</Link>
-              <Link to="/" className="hover:text-purple-400 transition">About</Link>
+
+            <nav className="hidden md:flex items-center gap-6 text-sm relative">
+              {navItems.map(({ name, path }) => (
+                <Link
+                  key={name}
+                  to={path}
+                  onClick={() => setIsActivePage(name)}
+                  className="relative hover:text-purple-400 transition-colors duration-300"
+                >
+                  {name}
+                  {isActivePage === name && (
+                    <div className="absolute bottom-[-22px] left-1/2 -translate-x-1/2 w-[50px] h-0.5 bg-purple-500 rounded-full transition-all duration-300 ease-in-out"></div>
+                  )}
+                </Link>
+              ))}
             </nav>
           </div>
 
@@ -51,20 +78,30 @@ export function Header() {
       {/* Mobile Menu */}
       {isOpen && (
         <div className="md:hidden px-4 pt-2 pb-4 space-y-2 bg-zinc-800">
-          <Link to="/" className="block hover:text-purple-400">Home</Link>
-          <Link to="/analyze" className="block hover:text-purple-400">Analyze</Link>
-          <Link to="/features" className="block hover:text-purple-400">Features</Link>
-          <Link to="/about" className="block hover:text-purple-400">About</Link>
-          <div className="pt-2 border-t border-zinc-700">
+          {navItems.map(({ name, path }) => (
+            <Link
+              key={name}
+              to={path}
+              className="block hover:text-purple-400"
+              onClick={() => {
+                setIsActivePage(name);
+                setIsOpen(false);
+              }}
+            >
+              {name}
+            </Link>
+          ))}
+
+          <div className="pt-2 flex items-center gap-5 border-t border-zinc-700">
             <Link
               to="/login"
-              className="block w-full text-left py-2 text-sm hover:bg-zinc-700 rounded px-2"
+              className="text-left py-2 text-sm hover:bg-zinc-700 rounded px-2"
             >
               Login
             </Link>
             <Link
               to="/signup"
-              className="block w-full text-left py-2 text-sm bg-purple-600 rounded px-2 mt-1 hover:bg-purple-700"
+              className="text-left py-2 text-sm bg-purple-600 rounded-full px-4 mt-1 hover:bg-purple-700"
             >
               Sign Up
             </Link>
@@ -72,5 +109,5 @@ export function Header() {
         </div>
       )}
     </header>
-  )
+  );
 }

@@ -164,93 +164,108 @@ const Projects = ({ projects }: { projects: any[] }) => (
 );
 
 const TechnicalProfile = ({ technicalProfile, skills, projects }) => (
-    <div className="shadow-lg p-8 mb-8 bg-zinc-900 border border-zinc-800">
-        <h2 className="text-3xl font-semibold text-white mb-8 flex items-center gap-3">
-            <Trophy className="w-6 h-6 text-yellow-400" />
-            Technical Profile
-        </h2>
+  <div className="bg-white dark:bg-zinc-900 shadow-xl p-6 md:p-10 mb-8 border border-zinc-200 dark:border-zinc-800">
+    <h2 className="text-2xl md:text-3xl font-bold text-zinc-900 dark:text-white mb-8 flex items-center gap-3">
+      <Trophy className="w-6 h-6 text-yellow-500" />
+      Technical Profile
+    </h2>
 
-        <div className="flex flex-col gap-5">
-            <div className="flex items-center justify-between flex-wrap">
-                <div className="bg-blue-500/10 p-2 rounded-sm">
-                    <h3 className="text-sm font-medium text-blue-300 mb-1 uppercase tracking-wide">Projects Analyzed</h3>
-                    <p className="text-3xl font-bold text-blue-400">{technicalProfile.totalProjects}</p>
-                </div>
-                <div className="bg-purple-500/10 p-2 rounded-sm border border-purple-400/20">
-                    <h3 className="text-sm font-medium text-purple-300 mb-1 uppercase tracking-wide">Avg Innovation Score</h3>
-                    <p className="text-3xl font-bold text-purple-400">{technicalProfile.avgInnovationScore.toFixed(1)}/10</p>
-                </div>
-                <div className="bg-zinc-800 p-2 rounded-sm border border-zinc-700">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-1 uppercase tracking-wide">Experience Level</h3>
-                    <p className="text-sm text-zinc-300">{skills.experienceLevel}</p>
-                </div>
-            </div>
+    {/* Stats */}
+    <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 mb-8">
+      <div className="bg-blue-100 dark:bg-blue-500/10 p-4 rounded-sm text-center">
+        <h3 className="text-sm font-semibold text-blue-600 dark:text-blue-300 uppercase tracking-wide mb-2">
+          Projects Analyzed
+        </h3>
+        <p className="text-4xl font-bold text-blue-700 dark:text-blue-400">
+          {technicalProfile.totalProjects}
+        </p>
+      </div>
 
-            <div>
-                <h3 className="text-sm font-semibold text-zinc-400 mb-2 uppercase tracking-wide">Primary Languages</h3>
-                <div className="flex flex-wrap gap-2">
-                    {technicalProfile.languages.map((lang, index) => (
-                        <span
-                            key={index}
-                            className="bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs border border-zinc-600"
-                        >
-                            {lang}
-                        </span>
-                    ))}
-                </div>
-            </div>
+      <div className="bg-purple-100 dark:bg-purple-500/10 p-4 rounded-sm text-center">
+        <h3 className="text-sm font-semibold text-purple-600 dark:text-purple-300 uppercase tracking-wide mb-2">
+          Avg Innovation Score
+        </h3>
+        <p className="text-4xl font-bold text-purple-700 dark:text-purple-400">
+          {technicalProfile.avgInnovationScore.toFixed(1)}/10
+        </p>
+      </div>
 
-            <div className="flex items-center justify-between gap-5">
-                <div>
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-2 uppercase tracking-wide">Industry Strengths</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {technicalProfile.industryStrengths.map((strength, index) => (
-                            <span
-                                key={index}
-                                className="bg-orange-500/10 text-orange-300 px-3 py-1.5 rounded-lg text-xs border border-orange-400/20"
-                            >
-                                {strength}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-
-                <div>
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-2 uppercase tracking-wide">Specializations</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {skills.specializations.map((spec, index) => (
-                            <span
-                                key={index}
-                                className="bg-purple-500/10 text-purple-300 px-3 py-1.5 rounded-lg text-xs border border-purple-400/20"
-                            >
-                                {spec}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            <div className="space-y-6">
-                <div>
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-2 uppercase tracking-wide">Project Innovation Scores</h3>
-                    <div className="flex items-center gap-5">
-                        {projects.map((project, index) => (
-                            <div
-                                key={index}
-                                className="flex gap-10 justify-between items-center bg-yellow-500/10 px-3 py-2 rounded-lg border border-yellow-500/20"
-                            >
-                                <span className="text-sm text-yellow-300 truncate">{project.name}</span>
-                                <div className="flex items-center gap-1 text-yellow-300">
-                                    <Zap className="w-4 h-4" />
-                                    <span className="text-sm font-semibold">{project.innovationScore}/10</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </div>
+      <div className="bg-zinc-100 dark:bg-zinc-800 p-4 rounded-sm text-center">
+        <h3 className="text-sm font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide mb-2">
+          Experience Level
+        </h3>
+        <p className="text-base font-medium text-zinc-800 dark:text-zinc-300">
+          {skills.experienceLevel}
+        </p>
+      </div>
     </div>
+
+    {/* Primary Languages */}
+    <div className="mb-8">
+      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-400 uppercase tracking-wide mb-3">
+        Primary Languages
+      </h3>
+      <div className="flex flex-wrap gap-2">
+        {technicalProfile.languages.map((lang, i) => (
+          <span key={i} className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-700 text-sm text-zinc-800 dark:text-white rounded-full">
+            {lang}
+          </span>
+        ))}
+      </div>
+    </div>
+
+    {/* Industry Strengths & Specializations */}
+    <div className="grid sm:grid-cols-2 gap-8 mb-8">
+      <div>
+        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-400 uppercase tracking-wide mb-3">
+          Industry Strengths
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {technicalProfile.industryStrengths.map((strength, i) => (
+            <span key={i} className="px-3 py-1.5 bg-orange-100 dark:bg-orange-500/10 text-sm text-orange-700 dark:text-orange-300 rounded-full">
+              {strength}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-400 uppercase tracking-wide mb-3">
+          Specializations
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {skills.specializations.map((spec, i) => (
+            <span key={i} className="px-3 py-1.5 bg-purple-100 dark:bg-purple-500/10 text-sm text-purple-700 dark:text-purple-300 rounded-full">
+              {spec}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    {/* Project Innovation Scores */}
+    <div>
+      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-400 uppercase tracking-wide mb-3">
+        Project Innovation Scores
+      </h3>
+      <div className="space-y-3 grid grid-cols-3">
+        {projects.map((project, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between px-4 py-3 rounded-sm bg-yellow-100 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/20"
+          >
+            <span className="text-sm font-medium text-yellow-700 dark:text-yellow-300 truncate">
+              {project.name}
+            </span>
+            <div className="flex items-center gap-1 text-yellow-700 dark:text-yellow-300">
+              <Zap className="w-4 h-4" />
+              <span className="text-sm font-semibold">{project.innovationScore}/10</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
 );
 
 const ErrorMessage = ({ error, onRetry }) => (
